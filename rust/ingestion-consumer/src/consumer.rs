@@ -16,6 +16,7 @@ use tokio::task::JoinHandle;
 use tracing::{error, info, warn};
 
 use crate::config::Config;
+use crate::config::LedgerMode;
 use crate::debug_recorder::{record_if, DebugEventKind, DebugRecorder, PartitionOffset};
 use crate::discovery::DiscoveryMode;
 use crate::dispatcher::{Dispatcher, KeyOffset, SubBatch};
@@ -103,6 +104,8 @@ pub struct IngestionConsumerOptions {
     pub deferred_flush_timeout: Duration,
     /// Debug event recorder; `None` unless `DEBUG_API_ENABLED`.
     pub debug_recorder: Option<Arc<DebugRecorder>>,
+    /// Whether the offset ledger observes or owns the commit path.
+    pub ledger_mode: LedgerMode,
 }
 
 /// The main consumer loop: reads from Kafka, routes messages by Kafka key
@@ -126,6 +129,8 @@ pub struct IngestionConsumer {
     /// Debug event recorder; `None` unless `DEBUG_API_ENABLED`.
     debug_recorder: Option<Arc<DebugRecorder>>,
     topic_offset_ledger: Arc<TopicOffsetLedger>,
+    /// Selects whether commits come from the batch spans or the ledger.
+    ledger_mode: LedgerMode,
 }
 
 impl IngestionConsumer {
@@ -161,6 +166,7 @@ impl IngestionConsumer {
             handle,
             group_id: options.group_id,
             topic_offset_ledger,
+            ledger_mode: options.ledger_mode,
         }
     }
 
@@ -228,6 +234,7 @@ impl IngestionConsumer {
             handle,
             group_id: config.ingestion_consumer_group_id.clone(),
             topic_offset_ledger,
+            ledger_mode: config.consumer_offset_ledger_mode,
         })
     }
 
@@ -873,7 +880,8 @@ impl IngestionConsumer {
         })
     }
 
-    /// Commit the max offset for each topic-partition.
+    /// Commit either the existing per-batch max offset or the verified ledger
+    /// frontier for each topic-partition.
     fn commit_offsets(
         &self,
         offset_spans: &HashMap<(String, i32), OffsetSpan>,
@@ -887,22 +895,67 @@ impl IngestionConsumer {
             return Ok(());
         }
 
-        // Validate contiguity/monotonicity per partition before committing, so
-        // a violation is attributed to the batch that caused it.
-        self.commit_sentinel.check_commit(offset_spans);
-
-        let mut tpl = TopicPartitionList::new();
-        for ((topic, partition), span) in offset_spans {
-            // Commit offset + 1 (Kafka convention: committed offset = next to read)
-            tpl.add_partition_offset(topic, *partition, rdkafka::Offset::Offset(span.last + 1))?;
+        match self.ledger_mode {
+            LedgerMode::Shadow => self.commit_offset_spans(offset_spans, ledger_offsets),
+            LedgerMode::Commit => self.commit_frontiers(offset_spans, ledger_offsets),
         }
+    }
 
-        self.consumer.commit(&tpl, CommitMode::Async)?;
+    /// Shadow mode: commit the per-batch max offsets unchanged, then settle
+    /// the ledger against them for comparison only.
+    fn commit_offset_spans(
+        &self,
+        offset_spans: &HashMap<(String, i32), OffsetSpan>,
+        ledger_offsets: &HashMap<TopicPartition, EpochOffsets>,
+    ) -> anyhow::Result<()> {
+        self.submit_commit(offset_spans)?;
         for (topic_partition, _) in
             settle_ledger(&self.topic_offset_ledger, ledger_offsets, offset_spans)
         {
             self.drain_frontier(topic_partition);
         }
+        Ok(())
+    }
+
+    /// Commit mode: settle the batch against the ledger and commit each
+    /// partition's frontier. A partition without a frontier is not committed
+    /// and stays on its last committed offset.
+    fn commit_frontiers(
+        &self,
+        offset_spans: &HashMap<(String, i32), OffsetSpan>,
+        ledger_offsets: &HashMap<TopicPartition, EpochOffsets>,
+    ) -> anyhow::Result<()> {
+        let settled = settle_ledger(&self.topic_offset_ledger, ledger_offsets, offset_spans);
+        let frontier_spans = frontier_spans(&settled, offset_spans);
+
+        if frontier_spans.is_empty() {
+            warn!("No ledger frontier available for completed offsets; skipping commit");
+            return Ok(());
+        }
+
+        self.submit_commit(&frontier_spans)?;
+        for (topic_partition, _) in settled {
+            self.drain_frontier(topic_partition);
+        }
+        Ok(())
+    }
+
+    /// Validate and submit one commit to Kafka.
+    fn submit_commit(
+        &self,
+        commit_spans: &HashMap<(String, i32), OffsetSpan>,
+    ) -> anyhow::Result<()> {
+        // Validate contiguity/monotonicity per partition before committing, so
+        // a violation is attributed to the batch that caused it.
+        self.commit_sentinel.check_commit(commit_spans);
+
+        let mut tpl = TopicPartitionList::new();
+        for ((topic, partition), span) in commit_spans {
+            // Commit offset + 1 (Kafka convention: committed offset = next to read)
+            tpl.add_partition_offset(topic, *partition, rdkafka::Offset::Offset(span.last + 1))?;
+        }
+
+        self.consumer.commit(&tpl, CommitMode::Async)?;
         counter!("ingestion_consumer_offset_commits_total").increment(1);
 
         Ok(())
@@ -917,6 +970,30 @@ impl IngestionConsumer {
             self.topic_offset_ledger.depth(topic_partition),
         );
     }
+}
+
+/// Map each settled frontier back to the span the commit path submits: the
+/// frontier is next-to-read and the span is last-processed, so the commit
+/// adds the 1 back and submits the frontier verbatim. A partition that
+/// settled without a frontier is left out and stays on its last commit.
+fn frontier_spans(
+    settled: &[(&TopicPartition, Option<LedgerOffset>)],
+    offset_spans: &HashMap<(String, i32), OffsetSpan>,
+) -> HashMap<TopicPartition, OffsetSpan> {
+    settled
+        .iter()
+        .filter_map(|&(topic_partition, frontier)| {
+            frontier.map(|frontier| {
+                (
+                    topic_partition.clone(),
+                    OffsetSpan {
+                        first: offset_spans[topic_partition].first,
+                        last: frontier.0 - 1,
+                    },
+                )
+            })
+        })
+        .collect()
 }
 
 /// Per-partition max offset + observed lag for the debug UI's batch events.
@@ -1111,5 +1188,64 @@ mod tests {
         let charge = message_charge(&message);
         assert_eq!(charge.events, 1);
         assert_eq!(charge.bytes, 0);
+    }
+
+    #[test]
+    fn frontier_spans_submit_each_frontier_verbatim() {
+        let topic_partition = ("events".to_string(), 0);
+        let settled = [(&topic_partition, Some(LedgerOffset(12)))];
+        let offset_spans = HashMap::from([(
+            topic_partition.clone(),
+            OffsetSpan {
+                first: 10,
+                last: 11,
+            },
+        )]);
+
+        let spans = frontier_spans(&settled, &offset_spans);
+        assert_eq!(
+            spans[&topic_partition],
+            OffsetSpan {
+                first: 10,
+                last: 11
+            }
+        );
+    }
+
+    #[test]
+    fn a_partition_without_a_frontier_is_not_committed() {
+        let with_frontier = ("events".to_string(), 0);
+        let without_frontier = ("events".to_string(), 1);
+        let settled = [
+            (&with_frontier, Some(LedgerOffset(11))),
+            (&without_frontier, None),
+        ];
+        let offset_spans = HashMap::from([
+            (
+                with_frontier.clone(),
+                OffsetSpan {
+                    first: 10,
+                    last: 11,
+                },
+            ),
+            (
+                without_frontier.clone(),
+                OffsetSpan {
+                    first: 20,
+                    last: 21,
+                },
+            ),
+        ]);
+
+        let spans = frontier_spans(&settled, &offset_spans);
+        assert_eq!(
+            spans[&with_frontier],
+            OffsetSpan {
+                first: 10,
+                last: 10
+            },
+            "the ledger frontier trails the span and wins"
+        );
+        assert!(!spans.contains_key(&without_frontier));
     }
 }
