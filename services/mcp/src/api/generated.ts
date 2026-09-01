@@ -85536,7 +85536,7 @@ export namespace Schemas {
      * Team-level tasks configuration.
      */
     export interface TasksTeamConfigResponse {
-      /** Project-wide default AI run triple; empty object when unset. */
+      /** Project-wide default AI run triple; all fields null when unset. */
       ai_run_preferences: TasksAIRunPreferences;
     }
 
@@ -85544,7 +85544,7 @@ export namespace Schemas {
      * The requesting user's per-project tasks configuration.
      */
     export interface TasksUserConfigResponse {
-      /** The requesting user's per-project default AI run triple; empty object when unset. */
+      /** The requesting user's per-project default AI run triple; all fields null when unset. */
       ai_run_preferences: TasksAIRunPreferences;
       /** The defaults a new run will use when no explicit runtime selection is sent. */
       resolved_ai_run_defaults: TasksResolvedAIRunDefaults;
