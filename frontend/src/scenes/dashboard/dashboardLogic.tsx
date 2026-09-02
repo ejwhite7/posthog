@@ -365,6 +365,7 @@ export interface dashboardLogicValues {
     showButtonTileModal: boolean
     showImageTileModal: boolean
     showRetentionBanner: boolean
+    showSeparatorTileModal: boolean
     showSubscriptions: boolean
     showTextTileModal: boolean
     sidePanelContext: SidePanelSceneContext | null
@@ -613,6 +614,9 @@ export interface dashboardLogicActions {
         value: true
     }
     openImageTileModal: () => {
+        value: true
+    }
+    openSeparatorTileModal: () => {
         value: true
     }
     openTextTileModal: () => {
@@ -1428,6 +1432,7 @@ export const dashboardLogic = kea<dashboardLogicType>([
         openAddInsightModal: true,
         openTextTileModal: true,
         openImageTileModal: true,
+        openSeparatorTileModal: true,
         openButtonTileModal: true,
         setTileOverride: (tile: DashboardTile<QueryBasedInsightModel>) => ({ tile }),
 
@@ -2318,6 +2323,13 @@ export const dashboardLogic = kea<dashboardLogicType>([
             false,
             {
                 openImageTileModal: () => true,
+                setTextTileId: () => false,
+            },
+        ],
+        showSeparatorTileModal: [
+            false,
+            {
+                openSeparatorTileModal: () => true,
                 setTextTileId: () => false,
             },
         ],
@@ -5009,6 +5021,9 @@ export const dashboardLogic = kea<dashboardLogicType>([
                     break
                 case 'image':
                     actions.openImageTileModal()
+                    break
+                case 'separator':
+                    actions.openSeparatorTileModal()
                     break
                 case 'button':
                     actions.openButtonTileModal()
