@@ -161,7 +161,12 @@ const upstreamProviderFailureClassifications =
   ]);
 
 const errorWithClassificationSchema = z.object({
-  data: z.object({ classification: agentErrorClassificationSchema }),
+  data: z.object({
+    classification: agentErrorClassificationSchema,
+    // The adapter carries the app-server's own cause here, so the diagnostic
+    // path can report it separately from the generic ACP display text.
+    result: z.string().optional(),
+  }),
 });
 
 type MessageCallback = (message: unknown) => void;
@@ -2270,6 +2275,7 @@ export class AgentServer {
   private extractErrorClassification(error: unknown): {
     classification: AgentErrorClassification;
     message: string;
+    cause: string;
   } {
     const message =
       error instanceof Error ? error.message : String(error ?? "");
@@ -2277,10 +2283,22 @@ export class AgentServer {
     // Prefer the structured `data` carried on RequestError if present.
     const parsed = errorWithClassificationSchema.safeParse(error);
     if (parsed.success) {
-      return { classification: parsed.data.data.classification, message };
+      // `message` is the generic text the SDK builds at the ACP boundary. The
+      // adapter puts the app-server's real cause on `data.result`, so the
+      // diagnostic path (terminal event + task-run update) reports that.
+      const cause = parsed.data.data.result || message;
+      return {
+        classification: parsed.data.data.classification,
+        message,
+        cause,
+      };
     }
 
-    return { classification: classifyAgentError(message), message };
+    return {
+      classification: classifyAgentError(message),
+      message,
+      cause: message,
+    };
   }
 
   private async runOwnedTurn<T>(operation: () => Promise<T>): Promise<T> {
@@ -2383,7 +2401,8 @@ export class AgentServer {
     phase: "initial" | "resume" | "followup",
     error: unknown,
   ): Promise<{ recoverable: boolean }> {
-    const { classification, message } = this.extractErrorClassification(error);
+    const { classification, message, cause } =
+      this.extractErrorClassification(error);
     const isUpstreamFailure =
       upstreamProviderFailureClassifications.has(classification);
     const displayMessage = isUpstreamFailure
@@ -2411,7 +2430,10 @@ export class AgentServer {
       return { recoverable: true };
     }
 
-    await this.signalTaskComplete(payload, "error", displayMessage, {
+    // The live client already saw `displayMessage` via broadcastTurnFailure;
+    // the terminal event and task-run update carry the real cause so a failed
+    // run is diagnosable by its actual error, not the generic wrapper.
+    await this.signalTaskComplete(payload, "error", cause || displayMessage, {
       errorCategory: classification,
     });
     return { recoverable: false };

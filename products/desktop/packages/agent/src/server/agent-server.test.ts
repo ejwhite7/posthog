@@ -10,7 +10,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ContentBlock } from "@agentclientprotocol/sdk";
+import { type ContentBlock, RequestError } from "@agentclientprotocol/sdk";
 import type { Adapter } from "@posthog/shared";
 import { zipSync } from "fflate";
 import jwt from "jsonwebtoken";
@@ -1298,6 +1298,61 @@ describe("AgentServer HTTP Mode", () => {
         }
       },
     );
+
+    it("reports the app-server cause, not the generic display text, on a fatal error", async () => {
+      // A codex fatal error reaches the host as a RequestError whose display
+      // text is generic; the real cause rides on `data.result`. The live client
+      // keeps the generic text, but the terminal event and task-run update must
+      // carry the cause so a failed run is diagnosable rather than one opaque
+      // bucket.
+      const testServer = createFailureTestServer();
+      const cause = "unexpected status 403 Forbidden: needs a paid plan";
+      const fatalError = RequestError.internalError(
+        { classification: "agent_error", result: cause },
+        "The agent stopped before completing this request. Please try again.",
+      );
+
+      await testServer.handleTurnFailure(
+        interactivePayload,
+        "initial",
+        fatalError,
+      );
+
+      // Live client: the generic display text, not the raw cause.
+      expect(testServer.eventStreamSender.enqueue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          notification: expect.objectContaining({
+            method: "session/update",
+            params: expect.objectContaining({
+              update: expect.objectContaining({
+                sessionUpdate: "error",
+                errorType: "agent_error",
+                message: expect.stringContaining("The agent stopped"),
+              }),
+            }),
+          }),
+        }),
+      );
+
+      // Diagnostic path: the app-server cause.
+      expect(testServer.eventStreamSender.enqueue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          notification: expect.objectContaining({
+            method: "_posthog/error",
+            params: expect.objectContaining({
+              message: cause,
+              error: cause,
+              errorCategory: "agent_error",
+            }),
+          }),
+        }),
+      );
+      expect(testServer.posthogAPI.updateTaskRun).toHaveBeenCalledWith(
+        "task-1",
+        "run-1",
+        expect.objectContaining({ status: "failed", error_message: cause }),
+      );
+    });
 
     it("quietly ends an interactive follow-up when its idle ACP transport closed", async () => {
       const testServer = createFailureTestServer();
