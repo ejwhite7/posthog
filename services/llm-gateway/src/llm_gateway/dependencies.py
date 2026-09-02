@@ -343,9 +343,15 @@ async def enforce_throttles(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail={
                     "error": {
-                        "message": f"Model '{model}' is not available. Choose another model. (rate_limit)",
+                        "message": f"Model '{model}' is not available for your account. Choose another model.",
                         "type": "permission_error",
+                        # `code` keeps clients that read only the code on their model-picker
+                        # prompt; `reason` tells the ones that read it that no plan change
+                        # unlocks this, so they prompt for another model instead of a payment
+                        # method. The free-tier shim's `(rate_limit)` suffix is deliberately
+                        # absent — this denial never clears on a retry.
                         "code": "model_gate",
+                        "reason": "model_not_available",
                     }
                 },
             )

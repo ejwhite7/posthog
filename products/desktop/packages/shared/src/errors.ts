@@ -74,9 +74,27 @@ const RATE_LIMIT_PATTERNS = [
   "[429]",
 ] as const;
 
-export type GatewayLimitCause = "model_gate" | "org_limit";
+export type GatewayLimitCause =
+  | "model_gate"
+  | "model_unavailable"
+  | "org_limit";
+
+/**
+ * The gateway's structured denial fields, matched as they reach us: the ACP
+ * layer embeds the whole error body in the message string, so the JSON is
+ * text by the time it gets here. Wording patterns stay as a fallback for the
+ * SDK surfaces that reduce the body to its message alone.
+ */
+const MODEL_GATE_CODE_REGEX = /"code"\s*:\s*"model_gate"/;
+const MODEL_UNAVAILABLE_REASON_REGEX = /"reason"\s*:\s*"model_not_available"/;
 
 const MODEL_GATE_PATTERNS = ["needs a paid posthog plan"] as const;
+
+// A model behind a rollout flag the account doesn't hold. No payment unlocks
+// it, so it must never reach the plan-upgrade prompt.
+const MODEL_UNAVAILABLE_PATTERNS = [
+  "is not available for your account",
+] as const;
 
 const ORG_LIMIT_PATTERNS = [
   "cloud usage limit reached",
@@ -146,7 +164,17 @@ export function classifyGatewayLimitError(
 ): GatewayLimitCause | null {
   const matches = (patterns: readonly string[]) =>
     includesAny(errorMessage, patterns) || includesAny(errorDetails, patterns);
-  if (matches(MODEL_GATE_PATTERNS)) return "model_gate";
+  const matchesRegex = (regex: RegExp) =>
+    regex.test(errorMessage) || (!!errorDetails && regex.test(errorDetails));
+  if (
+    matchesRegex(MODEL_UNAVAILABLE_REASON_REGEX) ||
+    matches(MODEL_UNAVAILABLE_PATTERNS)
+  ) {
+    return "model_unavailable";
+  }
+  if (matchesRegex(MODEL_GATE_CODE_REGEX) || matches(MODEL_GATE_PATTERNS)) {
+    return "model_gate";
+  }
   if (matches(ORG_LIMIT_PATTERNS)) return "org_limit";
   return null;
 }
@@ -253,7 +281,7 @@ export function isFatalSessionError(
   if (isRateLimitError(errorMessage, errorDetails)) return false;
   if (isTurnEndedWithoutResponseError(errorMessage, errorDetails)) return false;
   if (isTransientUpstreamError(errorMessage, errorDetails)) return false;
-  if (classifyGatewayLimitError(errorMessage, errorDetails) === "model_gate") {
+  if (classifyGatewayLimitError(errorMessage, errorDetails) !== null) {
     return false;
   }
   return (

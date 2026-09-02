@@ -442,7 +442,11 @@ class TestPreviewModelGateWiring:
         error = exc_info.value.detail["error"]
         assert error["code"] == "model_gate"
         assert "moonshotai/kimi-k3" in error["message"]
-        assert error["message"].endswith("(rate_limit)")
+        # A rollout flag never clears on a retry, so the free-tier gate's
+        # "(rate_limit)" shim must not ride along; `reason` tells clients that
+        # no payment method unlocks this model.
+        assert "(rate_limit)" not in error["message"]
+        assert error["reason"] == "model_not_available"
 
     @pytest.mark.asyncio
     async def test_preview_model_allowed_when_flag_enabled(self) -> None:
