@@ -541,6 +541,11 @@ class UserAccessControl:
 
         return self._organization.is_feature_available(AvailableFeature.ACCESS_CONTROL)
 
+    @cached_property
+    def _most_specific_mode(self) -> bool:
+        """True when this organization resolves access most-specific-first (RFC 557)."""
+        return bool(self._organization and self._organization.uses_most_specific_access_resolution)
+
     @property
     def is_organization_admin(self) -> bool:
         """Org owners/admins bypass object- and resource-level access control."""
@@ -923,6 +928,9 @@ class UserAccessControl:
         attached so callers can attribute it.
         """
 
+        if self._most_specific_mode:
+            return self.resolve_most_specific_resource_access(resource)
+
         # Check if this resource inherits access from a parent resource
         parent_resource = RESOURCE_INHERITANCE_MAP.get(resource)
         if parent_resource:
@@ -1180,6 +1188,15 @@ class UserAccessControl:
         allowed_resource_ids: set[str] = set()
 
         for resource_id, rows in rows_by_object_id.items():
+            if self._most_specific_mode:
+                # The object has rows, so its own rows decide: blocked on "none", shown otherwise.
+                access = self._most_specific_object_access_from_rows(resource, rows)
+                if access.access_level == NO_ACCESS_LEVEL:
+                    blocked_resource_ids.add(resource_id)
+                else:
+                    allowed_resource_ids.add(resource_id)
+                continue
+
             row = self._object_rows_decision(resource, rows)
             if row.access_level == NO_ACCESS_LEVEL:
                 blocked_resource_ids.add(resource_id)
@@ -1266,6 +1283,9 @@ class UserAccessControl:
         """
         if self._team is None:
             return True
+        if self._most_specific_mode:
+            access = self.resolve_most_specific_object_access(self._team)
+            return bool(access and access.access_level != NO_ACCESS_LEVEL)
         level = self.access_level_for_object(self._team, "project")
         return bool(level and level != NO_ACCESS_LEVEL)
 
@@ -1572,6 +1592,12 @@ class UserAccessControl:
         if not resource:
             return None
 
+        if self._most_specific_mode:
+            resolved_access = self.resolve_most_specific_object_access(obj)
+            if resolved_access is None or (explicit and resolved_access.source == "system_default"):
+                return None
+            return resolved_access.access_level
+
         resolved, access = self._object_access_level_precheck(resource, self._is_creator(obj), explicit=explicit)
         if resolved:
             return access.access_level if access else None
@@ -1628,13 +1654,21 @@ class UserAccessControl:
                 for ac in self._get_access_controls(self._access_controls_filters_for_queryset(resource)):
                     rows_by_object_id[ac.resource_id].append(ac)
 
-            access = self._object_access_level_from_rows(resource, rows_by_object_id.get(object_id, []))
+            object_rows = rows_by_object_id.get(object_id, [])
+            if self._most_specific_mode:
+                access = self._most_specific_object_access_from_rows(resource, object_rows)
+            else:
+                access = self._object_access_level_from_rows(resource, object_rows)
             results[object_id] = access.access_level if access else None
 
         return results
 
     # ------------------------------------------------------------
-    # Most-specific-wins resolution (RFC 557). Not enforced.
+    # Most-specific-wins resolution (RFC 557).
+    #
+    # Enforced for organizations with `uses_most_specific_access_resolution` on. The enforced
+    # entry points (`get_user_access_level`, `access_level_for_resource`, the queryset filter,
+    # `bulk_object_access_levels`, `has_project_access`) branch to this section for them.
     #
     # The methods in this section come in three tiers:
     # - Entry points (`resolve_most_specific_*_access`): apply the guards for the user, fetch
@@ -1651,16 +1685,16 @@ class UserAccessControl:
     #   `external_data_source`), access resolves as: rules on the object -> its parent ->
     #   the resource -> the parent's resource.
     # The first rule found in this order decides, even when it gives a lower level.
-    # The enforced methods resolve differently: they take the highest level across the
+    # The legacy methods resolve differently: they take the highest level across the
     # member and role overrides, and rules on the resource win over the object's own default.
     #
-    # DO NOT CALL THESE METHODS FOR ENFORCEMENT YET.
-    # Call `get_user_access_level`, `check_access_level_for_object`, or
-    # `access_level_for_resource` instead.
+    # Do not call these methods directly for enforcement. Call `get_user_access_level`,
+    # `check_access_level_for_object`, or `access_level_for_resource`, which apply the
+    # organization's resolution mode.
     # ------------------------------------------------------------
 
     def resolve_most_specific_object_access(self, obj: Model) -> Optional[ResolvedAccess]:
-        """Resolve the user's access to one object. Future source of truth, not enforced yet.
+        """Resolve the user's access to one object, most-specific-first.
 
         This method has no `explicit` parameter. It always returns the full answer. For the
         `explicit=True` behavior of the enforced methods, check
@@ -1680,7 +1714,7 @@ class UserAccessControl:
         )
 
     def resolve_most_specific_resource_access(self, resource: APIScopeObject) -> Optional[ResolvedAccess]:
-        """Resolve the user's access to one resource type. Future source of truth, not enforced yet.
+        """Resolve the user's access to one resource type, most-specific-first.
 
         The guards are the same as in `access_level_for_resource`. Only the decision differs:
         the most specific subject that has rows decides.
