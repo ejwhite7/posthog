@@ -17682,12 +17682,15 @@ export namespace Schemas {
       event_filters: ClusteringConfigSetEventFiltersEventFiltersItem[];
     }
 
+    export type ClusteringJobEventFiltersItem = { [key: string]: unknown };
+
     export interface ClusteringJob {
       readonly id: string;
       /** @maxLength 100 */
       name: string;
       analysis_level: AnalysisLevelEnum;
-      event_filters?: unknown;
+      /** PostHog property filters that scope this clustering job. Empty array means no filters. */
+      event_filters?: ClusteringJobEventFiltersItem[];
       enabled?: boolean;
       readonly created_at: string;
       readonly updated_at: string;
@@ -30186,7 +30189,7 @@ export namespace Schemas {
       /** Whether the issue is already being handled — fixed in recent changes, or with a fix in flight (an open PR, a recently active branch, an assigned / in-progress issue or agent task). Gates autostart, so a wrong `false` opens a duplicate PR. Tracked separately. */
       already_addressed?: boolean;
       /**
-         * Optional repo for autostart (opening a draft PR): `owner/repo` targets that repo, the `NO_REPO` sentinel opts out (report lands without a PR), and omitting it triggers free-form selection across the team's repos — the slow path on a many-repo team, so pass `owner/repo` when you know it.
+         * Optional repo for opening a draft PR, by autostart or by a person from the inbox. Pass `owner/repo` whenever you can say where a fix would land. Omit the field when you can't, which triggers free-form selection across the team's repos (the slow path on a many-repo team). Keep the `NO_REPO` sentinel for the rare report where nothing under version control could change, since a skill body, a config file, or a doc still lives in a repo.
          * @nullable
          */
       repository?: string | null;
@@ -46078,6 +46081,8 @@ export namespace Schemas {
       readonly has_scim: boolean;
       /** Whether SCIM provisioning is enabled. Setting this true generates a bearer token (returned once); setting it false clears the token. */
       scim_enabled?: boolean;
+      /** SCIM base URL for this identity provider configuration. */
+      readonly scim_base_url: string;
       /**
          * Plaintext SCIM bearer token. Only returned once, immediately after SCIM is enabled or the token is regenerated; null otherwise.
          * @nullable
@@ -49049,6 +49054,7 @@ export namespace Schemas {
      * * `source` - source
      * * `trace_id` - trace_id
      * * `span_id` - span_id
+     * * `pattern` - pattern
      * * `message` - message
      * * `custom` - custom
      */
@@ -49061,6 +49067,7 @@ export namespace Schemas {
       Source: 'source',
       TraceId: 'trace_id',
       SpanId: 'span_id',
+      Pattern: 'pattern',
       Message: 'message',
       Custom: 'custom',
     } as const;
@@ -49068,13 +49075,14 @@ export namespace Schemas {
     export interface LogsViewColumn {
       /** Client-generated stable identity for list operations (React keys, reorder). Never interpreted by the server. */
       id: string;
-      /** Column type. Built-in types resolve client-side from log row fields; `custom` columns are computed server-side from `expression`.
+      /** Column type. Most built-in types resolve client-side from log row fields; `pattern` and `custom` columns are computed server-side, the latter from `expression`.
        *
        * * `timestamp` - timestamp
        * * `level` - level
        * * `source` - source
        * * `trace_id` - trace_id
        * * `span_id` - span_id
+       * * `pattern` - pattern
        * * `message` - message
        * * `custom` - custom */
       type: LogsViewColumnTypeEnum;
@@ -56187,6 +56195,37 @@ export namespace Schemas {
       results: Run[];
     }
 
+    export interface SCIMRequestLog {
+      readonly id: string;
+      readonly request_method: string;
+      readonly request_path: string;
+      readonly request_headers: unknown;
+      readonly request_body: unknown;
+      readonly response_status: number;
+      readonly response_body: unknown;
+      readonly identity_provider: string;
+      /** @nullable */
+      readonly duration_ms: number | null;
+      readonly created_at: string;
+    }
+
+    export interface PaginatedSCIMRequestLog {
+      /** Total number of matching SCIM requests. */
+      count: number;
+      /**
+         * URL for the next page, or null on the last page.
+         * @nullable
+         */
+      next: string | null;
+      /**
+         * URL for the previous page, or null on the first page.
+         * @nullable
+         */
+      previous: string | null;
+      /** SCIM requests on this page. */
+      results: SCIMRequestLog[];
+    }
+
     export type SandboxCustomImageDTOSpec = { [key: string]: unknown };
 
     export type SandboxCustomImageDTOScanResult = { [key: string]: unknown };
@@ -60601,12 +60640,15 @@ export namespace Schemas {
       auto_archive_after_days?: number | null;
     }
 
+    export type PatchedClusteringJobEventFiltersItem = { [key: string]: unknown };
+
     export interface PatchedClusteringJob {
       readonly id?: string;
       /** @maxLength 100 */
       name?: string;
       analysis_level?: AnalysisLevelEnum;
-      event_filters?: unknown;
+      /** PostHog property filters that scope this clustering job. Empty array means no filters. */
+      event_filters?: PatchedClusteringJobEventFiltersItem[];
       enabled?: boolean;
       readonly created_at?: string;
       readonly updated_at?: string;
@@ -63357,6 +63399,8 @@ export namespace Schemas {
       readonly has_scim?: boolean;
       /** Whether SCIM provisioning is enabled. Setting this true generates a bearer token (returned once); setting it false clears the token. */
       scim_enabled?: boolean;
+      /** SCIM base URL for this identity provider configuration. */
+      readonly scim_base_url?: string;
       /**
          * Plaintext SCIM bearer token. Only returned once, immediately after SCIM is enabled or the token is regenerated; null otherwise.
          * @nullable
@@ -87324,8 +87368,8 @@ export namespace Schemas {
 
     export interface WidgetGenerateRequest {
       /**
-         * Instructions for the generated widget.
-         * @maxLength 20000
+         * Instructions for the generated widget. Initial and improvement instructions accept up to 20,000 characters; regeneration accepts complete instructions up to 50,000 characters.
+         * @maxLength 50000
          */
       prompt: string;
       /** Idempotency key for this generation job. */
@@ -87343,6 +87387,8 @@ export namespace Schemas {
        * * `regenerate` - regenerate
        * * `improve` - improve */
       generation_operation?: GenerationOperationEnum;
+      /** Current widget version the improvement is based on. Required for improve operations. */
+      expected_current_version_id?: string;
     }
 
     /**
@@ -87500,7 +87546,10 @@ export namespace Schemas {
       version_operation: GeneratedWidgetVersionOperationEnum;
       /** Instructions added by this version. */
       prompt_delta: string;
-      /** Complete instructions represented by this version. */
+      /**
+         * Complete instructions represented by this version, up to 50,000 characters.
+         * @maxLength 50000
+         */
       effective_prompt: string;
       /**
          * AI model, or null when this version did not run a model.
@@ -90338,6 +90387,41 @@ export namespace Schemas {
     offset?: number;
     };
 
+    export type DomainsScimLogsRetrieveParams = {
+    /**
+     * Include requests at or after this time.
+     */
+    after?: string;
+    /**
+     * Include requests at or before this time.
+     */
+    before?: string;
+    /**
+     * Page number to return.
+     * @minimum 1
+     */
+    page?: number;
+    /**
+     * Number of requests to return per page.
+     * @minimum 1
+     * @maximum 100
+     */
+    page_size?: number;
+    /**
+     * Search request paths and masked request bodies.
+     * @minLength 1
+     */
+    search?: string;
+    /**
+     * Maximum HTTP response status to include, such as 499.
+     */
+    status_max?: number;
+    /**
+     * Minimum HTTP response status to include, such as 400.
+     */
+    status_min?: number;
+    };
+
     export type OrgFeatureFlagsKeysParams = {
     /**
      * Page size (max 100)
@@ -90366,6 +90450,41 @@ export namespace Schemas {
      * The initial index from which to return the results.
      */
     offset?: number;
+    };
+
+    export type IdentityProviderConfigsScimLogsRetrieveParams = {
+    /**
+     * Include requests at or after this time.
+     */
+    after?: string;
+    /**
+     * Include requests at or before this time.
+     */
+    before?: string;
+    /**
+     * Page number to return.
+     * @minimum 1
+     */
+    page?: number;
+    /**
+     * Number of requests to return per page.
+     * @minimum 1
+     * @maximum 100
+     */
+    page_size?: number;
+    /**
+     * Search request paths and masked request bodies.
+     * @minLength 1
+     */
+    search?: string;
+    /**
+     * Maximum HTTP response status to include, such as 499.
+     */
+    status_max?: number;
+    /**
+     * Minimum HTTP response status to include, such as 400.
+     */
+    status_min?: number;
     };
 
     export type OrgOrganizationsIntegrationsListParams = {
