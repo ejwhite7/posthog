@@ -1,4 +1,6 @@
+use crate::flags::flag_group_type_mapping::GroupTypeIndex;
 use crate::flags::flag_models::*;
+use crate::properties::property_models::PropertyFilter;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 
@@ -34,9 +36,17 @@ impl FeatureFlag {
     ///
     /// This is true if the flag has a group type index set
     /// OR if the flag has a cohort filter
-    /// OR if the flag has a property filter and the property filter is not present in the overrides
-    pub fn requires_db_preparation(&self, overrides: &HashMap<String, Value>) -> bool {
-        self.filters.requires_db_properties(overrides, &self.key)
+    /// OR if the flag has a person property filter that is not present in the overrides
+    /// OR if the flag has a group property filter that `group_filter_needs_db` selects
+    ///    (the caller owns the request's group context — see
+    ///    `FeatureFlagMatcher::group_filter_needs_db_prep`)
+    pub fn requires_db_preparation(
+        &self,
+        overrides: &HashMap<String, Value>,
+        group_filter_needs_db: &dyn Fn(&PropertyFilter, Option<GroupTypeIndex>) -> bool,
+    ) -> bool {
+        self.filters
+            .requires_db_properties(overrides, &self.key, group_filter_needs_db)
             || self.filters.requires_cohort_filters()
     }
 
@@ -121,11 +131,13 @@ pub fn flags_require_db_preparation<'a>(
     flags: &[&'a FeatureFlag],
     overrides: &HashMap<String, Value>,
     filtered_out_flag_ids: &HashSet<i32>,
+    group_filter_needs_db: &dyn Fn(&PropertyFilter, Option<GroupTypeIndex>) -> bool,
 ) -> Vec<&'a FeatureFlag> {
     flags
         .iter()
         .filter(|flag| {
-            !filtered_out_flag_ids.contains(&flag.id) && flag.requires_db_preparation(overrides)
+            !filtered_out_flag_ids.contains(&flag.id)
+                && flag.requires_db_preparation(overrides, group_filter_needs_db)
         })
         .copied()
         .collect()
@@ -1224,12 +1236,12 @@ mod tests {
         )]);
 
         assert!(flag.get_group_type_index().is_none());
-        assert!(!flag.requires_db_preparation(&overrides));
+        assert!(!flag.requires_db_preparation(&overrides, &|_, _| true));
 
         flag.filters.aggregation_group_type_index = Some(0);
 
         assert!(flag.get_group_type_index().is_some());
-        assert!(flag.requires_db_preparation(&overrides));
+        assert!(flag.requires_db_preparation(&overrides, &|_, _| true));
     }
 
     #[test]
@@ -1244,7 +1256,7 @@ mod tests {
             Value::String("value".to_string()),
         )]);
 
-        assert!(flag.requires_db_preparation(&overrides));
+        assert!(flag.requires_db_preparation(&overrides, &|_, _| true));
     }
 
     #[test]
@@ -1264,7 +1276,7 @@ mod tests {
                     Value::String("value".to_string()),
                 ),
             ]);
-            assert!(flag.requires_db_preparation(&overrides));
+            assert!(flag.requires_db_preparation(&overrides, &|_, _| true));
         }
 
         {
@@ -1278,7 +1290,7 @@ mod tests {
                     Value::String("value".to_string()),
                 ),
             ]);
-            assert!(!flag.requires_db_preparation(&overrides));
+            assert!(!flag.requires_db_preparation(&overrides, &|_, _| true));
         }
     }
 
@@ -1288,7 +1300,7 @@ mod tests {
         let mut flag = mock!(FeatureFlag);
         flag.filters.holdout = Some(mock!(Holdout));
 
-        assert!(!flag.requires_db_preparation(&HashMap::new()));
+        assert!(!flag.requires_db_preparation(&HashMap::new(), &|_, _| true));
     }
 
     // ======== Tests for experience continuity optimization helper methods ========
@@ -1575,18 +1587,19 @@ mod tests {
         let overrides = HashMap::new();
 
         // Without filtering, both flags require DB preparation
-        let result = flags_require_db_preparation(&flags, &overrides, &HashSet::new());
+        let result =
+            flags_require_db_preparation(&flags, &overrides, &HashSet::new(), &|_, _| true);
         assert_eq!(result.len(), 2);
 
         // With flag_a filtered out, only flag_b requires preparation
         let filtered = HashSet::from([1]);
-        let result = flags_require_db_preparation(&flags, &overrides, &filtered);
+        let result = flags_require_db_preparation(&flags, &overrides, &filtered, &|_, _| true);
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].key, "flag_b");
 
         // With both filtered, none require preparation
         let filtered = HashSet::from([1, 2]);
-        let result = flags_require_db_preparation(&flags, &overrides, &filtered);
+        let result = flags_require_db_preparation(&flags, &overrides, &filtered, &|_, _| true);
         assert!(result.is_empty());
     }
 }
