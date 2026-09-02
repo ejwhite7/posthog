@@ -1756,12 +1756,14 @@ export class CodexAppServerAgent extends BaseAcpAgent {
         // The display text is generic, so carry the app-server's own message as
         // error data. The host classifies the failure from what it can read: with
         // only the generic text a transient upstream cut reads as a fatal agent
-        // error, and the host's bounded turn retry never fires.
+        // error, and the host's bounded turn retry never fires. Build the error
+        // directly rather than via `internalError`, which would prepend
+        // "Internal error: " to the generic sentence the client renders.
         void this.failTurn(
-          RequestError.internalError(
-            { classification: classifyAgentError(message), result: message },
-            GENERIC_FATAL_ERROR_MESSAGE,
-          ),
+          new RequestError(-32603, GENERIC_FATAL_ERROR_MESSAGE, {
+            classification: classifyAgentError(message),
+            result: message,
+          }),
         );
       }
     }

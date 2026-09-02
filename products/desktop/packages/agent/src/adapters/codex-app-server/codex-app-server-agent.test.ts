@@ -2555,6 +2555,12 @@ describe("CodexAppServerAgent", () => {
       (e: unknown) => e,
     );
     expect(err).toBeInstanceOf(RequestError);
+    // Exact match: the client renders this sentence, so a stray "Internal
+    // error: " prefix from RequestError.internalError() would be a regression a
+    // substring assertion could not catch.
+    expect((err as RequestError).message).toBe(
+      "The agent stopped before completing this request. Please try again.",
+    );
     expect((err as RequestError).data).toEqual({
       classification: "upstream_provider_failure",
       result: "unexpected status 503 Service Unavailable: retry",
