@@ -2542,6 +2542,8 @@ export interface Tileable {
     color: InsightColor | null
 }
 
+export type DashboardTileIdOrNew = number | null
+
 export interface DashboardTile<T = InsightModel> extends Tileable {
     id: number
     insight?: T
@@ -2776,6 +2778,7 @@ export type DashboardTemplateStoredInsightTile = {
     query?: Node | Record<string, unknown> | null
     layouts?: Record<DashboardLayoutSize, TileLayout> | Record<string, never>
     color?: InsightColor | null
+    transparent_background?: boolean | null
     filters?: Record<string, unknown>
 }
 
@@ -2784,6 +2787,7 @@ export type DashboardTemplateStoredTextTile = {
     body: string
     layouts?: Record<DashboardLayoutSize, TileLayout> | Record<string, never>
     color?: InsightColor | null
+    transparent_background?: boolean | null
 }
 
 export type DashboardTemplateStoredButtonTile = {
@@ -2796,6 +2800,7 @@ export type DashboardTemplateStoredButtonTile = {
     }
     layouts?: Record<DashboardLayoutSize, TileLayout> | Record<string, never>
     color?: InsightColor | null
+    transparent_background?: boolean | null
 }
 
 export type DashboardTemplateStoredWidgetTile = {
@@ -2804,6 +2809,7 @@ export type DashboardTemplateStoredWidgetTile = {
     config?: Record<string, unknown>
     layouts?: Record<DashboardLayoutSize, TileLayout> | Record<string, never>
     color?: InsightColor | null
+    transparent_background?: boolean | null
 }
 
 export type DashboardTemplateStoredTile =
