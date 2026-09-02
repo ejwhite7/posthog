@@ -407,6 +407,7 @@ export const hogFlowsCreateBodyTriggerMaskingOneTtlMin = 60
 export const hogFlowsCreateBodyTriggerMaskingOneTtlMax = 94608000
 
 export const hogFlowsCreateBodyConversionOneEventsItemFiltersOneSourceDefault = `events`
+export const hogFlowsCreateBodyConversionOneWindowRegExp = new RegExp('^\\d\*\\.?\\d+[dhms]$')
 export const hogFlowsCreateBodyEmailSendingRateLimitOneCountMax = 1000000
 
 export const hogFlowsCreateBodyActionsItemIdMax = 200
@@ -501,11 +502,18 @@ export const HogFlowsCreateBody = /* @__PURE__ */ zod
                         .describe(
                             "Event-based conversion goals: [{filters: {events: [{id, name, type: 'events'}], ...}}]."
                         ),
+                    window: zod
+                        .string()
+                        .regex(hogFlowsCreateBodyConversionOneWindowRegExp)
+                        .nullish()
+                        .describe(
+                            "How long after entering the workflow a conversion still counts, as a duration string: '7d', '12h', '30m', '45s'. Same form the delay steps use. Maximum '365d'. Omit it to use the default window."
+                        ),
                     window_minutes: zod
                         .number()
                         .nullish()
                         .describe(
-                            'Conversion window in minutes after a person enters the workflow. null = no explicit window.'
+                            "DEPRECATED, use 'window' instead. Conversion window in MINUTES (not seconds) after a person enters the workflow. Maximum 129600 (90 days). null = use the default window."
                         ),
                     bytecode: zod
                         .unknown()
@@ -516,7 +524,7 @@ export const HogFlowsCreateBody = /* @__PURE__ */ zod
             ])
             .optional()
             .describe(
-                'Conversion goal. filters: ARRAY of property conditions [{key, value, operator, type: event|person|group}]; events: event-based goals [{filters: {events: [...]}}]; window_minutes: minutes after entry. Required for exit_on_conversion \/ exit_on_trigger_not_matched_or_conversion. bytecode compiled server-side.'
+                "Conversion goal. filters: ARRAY of property conditions [{key, value, operator, type: event|person|group}]; events: event-based goals [{filters: {events: [...]}}]; window: how long after entry a conversion counts, as a duration string such as '7d' or '12h', maximum '365d' (window_minutes is the deprecated integer form, in MINUTES not seconds). Required for exit_on_conversion \/ exit_on_trigger_not_matched_or_conversion. bytecode compiled server-side."
             ),
         exit_condition: zod
             .enum([
@@ -794,6 +802,7 @@ export const hogFlowsUpdateBodyTriggerMaskingOneTtlMin = 60
 export const hogFlowsUpdateBodyTriggerMaskingOneTtlMax = 94608000
 
 export const hogFlowsUpdateBodyConversionOneEventsItemFiltersOneSourceDefault = `events`
+export const hogFlowsUpdateBodyConversionOneWindowRegExp = new RegExp('^\\d\*\\.?\\d+[dhms]$')
 export const hogFlowsUpdateBodyEmailSendingRateLimitOneCountMax = 1000000
 
 export const hogFlowsUpdateBodyActionsItemIdMax = 200
@@ -888,11 +897,18 @@ export const HogFlowsUpdateBody = /* @__PURE__ */ zod
                         .describe(
                             "Event-based conversion goals: [{filters: {events: [{id, name, type: 'events'}], ...}}]."
                         ),
+                    window: zod
+                        .string()
+                        .regex(hogFlowsUpdateBodyConversionOneWindowRegExp)
+                        .nullish()
+                        .describe(
+                            "How long after entering the workflow a conversion still counts, as a duration string: '7d', '12h', '30m', '45s'. Same form the delay steps use. Maximum '365d'. Omit it to use the default window."
+                        ),
                     window_minutes: zod
                         .number()
                         .nullish()
                         .describe(
-                            'Conversion window in minutes after a person enters the workflow. null = no explicit window.'
+                            "DEPRECATED, use 'window' instead. Conversion window in MINUTES (not seconds) after a person enters the workflow. Maximum 129600 (90 days). null = use the default window."
                         ),
                     bytecode: zod
                         .unknown()
@@ -903,7 +919,7 @@ export const HogFlowsUpdateBody = /* @__PURE__ */ zod
             ])
             .optional()
             .describe(
-                'Conversion goal. filters: ARRAY of property conditions [{key, value, operator, type: event|person|group}]; events: event-based goals [{filters: {events: [...]}}]; window_minutes: minutes after entry. Required for exit_on_conversion \/ exit_on_trigger_not_matched_or_conversion. bytecode compiled server-side.'
+                "Conversion goal. filters: ARRAY of property conditions [{key, value, operator, type: event|person|group}]; events: event-based goals [{filters: {events: [...]}}]; window: how long after entry a conversion counts, as a duration string such as '7d' or '12h', maximum '365d' (window_minutes is the deprecated integer form, in MINUTES not seconds). Required for exit_on_conversion \/ exit_on_trigger_not_matched_or_conversion. bytecode compiled server-side."
             ),
         exit_condition: zod
             .enum([
@@ -1181,6 +1197,7 @@ export const hogFlowsPartialUpdateBodyTriggerMaskingOneTtlMin = 60
 export const hogFlowsPartialUpdateBodyTriggerMaskingOneTtlMax = 94608000
 
 export const hogFlowsPartialUpdateBodyConversionOneEventsItemFiltersOneSourceDefault = `events`
+export const hogFlowsPartialUpdateBodyConversionOneWindowRegExp = new RegExp('^\\d\*\\.?\\d+[dhms]$')
 export const hogFlowsPartialUpdateBodyEmailSendingRateLimitOneCountMax = 1000000
 
 export const hogFlowsPartialUpdateBodyActionsItemIdMax = 200
@@ -1280,11 +1297,18 @@ export const HogFlowsPartialUpdateBody = /* @__PURE__ */ zod
                         .describe(
                             "Event-based conversion goals: [{filters: {events: [{id, name, type: 'events'}], ...}}]."
                         ),
+                    window: zod
+                        .string()
+                        .regex(hogFlowsPartialUpdateBodyConversionOneWindowRegExp)
+                        .nullish()
+                        .describe(
+                            "How long after entering the workflow a conversion still counts, as a duration string: '7d', '12h', '30m', '45s'. Same form the delay steps use. Maximum '365d'. Omit it to use the default window."
+                        ),
                     window_minutes: zod
                         .number()
                         .nullish()
                         .describe(
-                            'Conversion window in minutes after a person enters the workflow. null = no explicit window.'
+                            "DEPRECATED, use 'window' instead. Conversion window in MINUTES (not seconds) after a person enters the workflow. Maximum 129600 (90 days). null = use the default window."
                         ),
                     bytecode: zod
                         .unknown()
@@ -1295,7 +1319,7 @@ export const HogFlowsPartialUpdateBody = /* @__PURE__ */ zod
             ])
             .optional()
             .describe(
-                'Conversion goal. filters: ARRAY of property conditions [{key, value, operator, type: event|person|group}]; events: event-based goals [{filters: {events: [...]}}]; window_minutes: minutes after entry. Required for exit_on_conversion \/ exit_on_trigger_not_matched_or_conversion. bytecode compiled server-side.'
+                "Conversion goal. filters: ARRAY of property conditions [{key, value, operator, type: event|person|group}]; events: event-based goals [{filters: {events: [...]}}]; window: how long after entry a conversion counts, as a duration string such as '7d' or '12h', maximum '365d' (window_minutes is the deprecated integer form, in MINUTES not seconds). Required for exit_on_conversion \/ exit_on_trigger_not_matched_or_conversion. bytecode compiled server-side."
             ),
         exit_condition: zod
             .enum([
@@ -1761,6 +1785,9 @@ export const hogFlowsInvocationsCreateBodyConfigurationOneTriggerMaskingOneTtlMi
 export const hogFlowsInvocationsCreateBodyConfigurationOneTriggerMaskingOneTtlMax = 94608000
 
 export const hogFlowsInvocationsCreateBodyConfigurationOneConversionOneEventsItemFiltersOneSourceDefault = `events`
+export const hogFlowsInvocationsCreateBodyConfigurationOneConversionOneWindowRegExp = new RegExp(
+    '^\\d\*\\.?\\d+[dhms]$'
+)
 export const hogFlowsInvocationsCreateBodyConfigurationOneEmailSendingRateLimitOneCountMax = 1000000
 
 export const hogFlowsInvocationsCreateBodyConfigurationOneActionsItemIdMax = 200
@@ -1916,11 +1943,18 @@ export const HogFlowsInvocationsCreateBody = /* @__PURE__ */ zod.object({
                             .describe(
                                 "Event-based conversion goals: [{filters: {events: [{id, name, type: 'events'}], ...}}]."
                             ),
+                        window: zod
+                            .string()
+                            .regex(hogFlowsInvocationsCreateBodyConfigurationOneConversionOneWindowRegExp)
+                            .nullish()
+                            .describe(
+                                "How long after entering the workflow a conversion still counts, as a duration string: '7d', '12h', '30m', '45s'. Same form the delay steps use. Maximum '365d'. Omit it to use the default window."
+                            ),
                         window_minutes: zod
                             .number()
                             .nullish()
                             .describe(
-                                'Conversion window in minutes after a person enters the workflow. null = no explicit window.'
+                                "DEPRECATED, use 'window' instead. Conversion window in MINUTES (not seconds) after a person enters the workflow. Maximum 129600 (90 days). null = use the default window."
                             ),
                         bytecode: zod
                             .unknown()
@@ -1931,7 +1965,7 @@ export const HogFlowsInvocationsCreateBody = /* @__PURE__ */ zod.object({
                 ])
                 .optional()
                 .describe(
-                    'Conversion goal. filters: ARRAY of property conditions [{key, value, operator, type: event|person|group}]; events: event-based goals [{filters: {events: [...]}}]; window_minutes: minutes after entry. Required for exit_on_conversion \/ exit_on_trigger_not_matched_or_conversion. bytecode compiled server-side.'
+                    "Conversion goal. filters: ARRAY of property conditions [{key, value, operator, type: event|person|group}]; events: event-based goals [{filters: {events: [...]}}]; window: how long after entry a conversion counts, as a duration string such as '7d' or '12h', maximum '365d' (window_minutes is the deprecated integer form, in MINUTES not seconds). Required for exit_on_conversion \/ exit_on_trigger_not_matched_or_conversion. bytecode compiled server-side."
                 ),
             exit_condition: zod
                 .enum([
@@ -2502,6 +2536,7 @@ export const hogFlowsBulkDeleteCreateBodyTriggerMaskingOneTtlMin = 60
 export const hogFlowsBulkDeleteCreateBodyTriggerMaskingOneTtlMax = 94608000
 
 export const hogFlowsBulkDeleteCreateBodyConversionOneEventsItemFiltersOneSourceDefault = `events`
+export const hogFlowsBulkDeleteCreateBodyConversionOneWindowRegExp = new RegExp('^\\d\*\\.?\\d+[dhms]$')
 export const hogFlowsBulkDeleteCreateBodyEmailSendingRateLimitOneCountMax = 1000000
 
 export const hogFlowsBulkDeleteCreateBodyActionsItemIdMax = 200
@@ -2601,11 +2636,18 @@ export const HogFlowsBulkDeleteCreateBody = /* @__PURE__ */ zod
                         .describe(
                             "Event-based conversion goals: [{filters: {events: [{id, name, type: 'events'}], ...}}]."
                         ),
+                    window: zod
+                        .string()
+                        .regex(hogFlowsBulkDeleteCreateBodyConversionOneWindowRegExp)
+                        .nullish()
+                        .describe(
+                            "How long after entering the workflow a conversion still counts, as a duration string: '7d', '12h', '30m', '45s'. Same form the delay steps use. Maximum '365d'. Omit it to use the default window."
+                        ),
                     window_minutes: zod
                         .number()
                         .nullish()
                         .describe(
-                            'Conversion window in minutes after a person enters the workflow. null = no explicit window.'
+                            "DEPRECATED, use 'window' instead. Conversion window in MINUTES (not seconds) after a person enters the workflow. Maximum 129600 (90 days). null = use the default window."
                         ),
                     bytecode: zod
                         .unknown()
@@ -2616,7 +2658,7 @@ export const HogFlowsBulkDeleteCreateBody = /* @__PURE__ */ zod
             ])
             .optional()
             .describe(
-                'Conversion goal. filters: ARRAY of property conditions [{key, value, operator, type: event|person|group}]; events: event-based goals [{filters: {events: [...]}}]; window_minutes: minutes after entry. Required for exit_on_conversion \/ exit_on_trigger_not_matched_or_conversion. bytecode compiled server-side.'
+                "Conversion goal. filters: ARRAY of property conditions [{key, value, operator, type: event|person|group}]; events: event-based goals [{filters: {events: [...]}}]; window: how long after entry a conversion counts, as a duration string such as '7d' or '12h', maximum '365d' (window_minutes is the deprecated integer form, in MINUTES not seconds). Required for exit_on_conversion \/ exit_on_trigger_not_matched_or_conversion. bytecode compiled server-side."
             ),
         exit_condition: zod
             .enum([
