@@ -1,1 +1,1 @@
-0027_add_mcp_template_oauth_scope_allowlist
+0028_add_mcp_template_oauth_credentials_source
