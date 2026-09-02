@@ -1,3 +1,4 @@
+import { router } from 'kea-router'
 import { expectLogic } from 'kea-test-utils'
 
 import api, { PaginatedResponse } from 'lib/api'
@@ -167,5 +168,15 @@ describe('sourceManagementLogic', () => {
 
         resolveShallowLoad?.({ tables: {}, joins: [] } as DatabaseSchemaQueryResponse)
         await shallowLoad
+    })
+
+    it('loads table metadata without fields on the sources page', async () => {
+        router.actions.push('/data-management/sources')
+
+        databaseLogic.mount()
+        logic.mount()
+
+        await expectLogic(databaseLogic).toDispatchActions(['loadDatabaseSuccess'])
+        expect(performQuery).toHaveBeenCalledWith(expect.objectContaining({ includeFields: false }))
     })
 })
