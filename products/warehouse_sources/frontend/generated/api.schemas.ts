@@ -893,6 +893,7 @@ export const ExternalDataSourceCreatedViaEnumApi = {
  * * `Freshchat` - Freshchat
  * * `Freshservice` - Freshservice
  * * `Fulcrum` - Fulcrum
+ * * `GainsightCs` - GainsightCs
  * * `GainsightPx` - GainsightPx
  * * `GitBook` - GitBook
  * * `Glassfrog` - Glassfrog
@@ -2224,6 +2225,7 @@ export const ExternalDataSourceTypeEnumApi = {
     Freshchat: 'Freshchat',
     Freshservice: 'Freshservice',
     Fulcrum: 'Fulcrum',
+    GainsightCs: 'GainsightCs',
     GainsightPx: 'GainsightPx',
     GitBook: 'GitBook',
     Glassfrog: 'Glassfrog',
@@ -3702,6 +3704,7 @@ export interface ExternalDataSourceCreateApi {
      * * `Freshchat` - Freshchat
      * * `Freshservice` - Freshservice
      * * `Fulcrum` - Fulcrum
+     * * `GainsightCs` - GainsightCs
      * * `GainsightPx` - GainsightPx
      * * `GitBook` - GitBook
      * * `Glassfrog` - Glassfrog
@@ -5266,6 +5269,7 @@ export interface ExternalDataSourceConnectionOptionApi {
      * * `Freshchat` - Freshchat
      * * `Freshservice` - Freshservice
      * * `Fulcrum` - Fulcrum
+     * * `GainsightCs` - GainsightCs
      * * `GainsightPx` - GainsightPx
      * * `GitBook` - GitBook
      * * `Glassfrog` - Glassfrog
@@ -6626,6 +6630,7 @@ export interface DatabaseSchemaRequestApi {
      * * `Freshchat` - Freshchat
      * * `Freshservice` - Freshservice
      * * `Fulcrum` - Fulcrum
+     * * `GainsightCs` - GainsightCs
      * * `GainsightPx` - GainsightPx
      * * `GitBook` - GitBook
      * * `Glassfrog` - Glassfrog
@@ -7961,6 +7966,7 @@ export interface DirectConnectionSourceOptionApi {
      * * `Freshchat` - Freshchat
      * * `Freshservice` - Freshservice
      * * `Fulcrum` - Fulcrum
+     * * `GainsightCs` - GainsightCs
      * * `GainsightPx` - GainsightPx
      * * `GitBook` - GitBook
      * * `Glassfrog` - Glassfrog
@@ -9381,6 +9387,7 @@ export interface SourcePreviewRequestApi {
      * * `Freshchat` - Freshchat
      * * `Freshservice` - Freshservice
      * * `Fulcrum` - Fulcrum
+     * * `GainsightCs` - GainsightCs
      * * `GainsightPx` - GainsightPx
      * * `GitBook` - GitBook
      * * `Glassfrog` - Glassfrog
@@ -10751,6 +10758,7 @@ export interface SourceSetupApi {
      * * `Freshchat` - Freshchat
      * * `Freshservice` - Freshservice
      * * `Fulcrum` - Fulcrum
+     * * `GainsightCs` - GainsightCs
      * * `GainsightPx` - GainsightPx
      * * `GitBook` - GitBook
      * * `Glassfrog` - Glassfrog
@@ -12128,6 +12136,7 @@ export interface SourceCredentialCreateApi {
      * * `Freshchat` - Freshchat
      * * `Freshservice` - Freshservice
      * * `Fulcrum` - Fulcrum
+     * * `GainsightCs` - GainsightCs
      * * `GainsightPx` - GainsightPx
      * * `GitBook` - GitBook
      * * `Glassfrog` - Glassfrog
