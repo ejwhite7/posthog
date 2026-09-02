@@ -6,7 +6,7 @@ import api, { ApiError, PaginatedResponse } from 'lib/api'
 import { initKeaTests } from '~/test/init'
 import { AccessControlLevel, DataWarehouseSyncInterval, ExternalDataJobStatus, ExternalDataSource } from '~/types'
 
-import type { ExternalDataSourceSummaryApi } from 'products/warehouse_sources/frontend/generated/api.schemas'
+import type { PaginatedExternalDataSourceSummaryListApi } from 'products/warehouse_sources/frontend/generated/api.schemas'
 
 import { shouldLoadSourceSummaries, sourcesDataLogic } from '../sourcesDataLogic'
 
@@ -37,7 +37,7 @@ const emptyResponse: PaginatedResponse<ExternalDataSource> = {
     previous: null,
 } as PaginatedResponse<ExternalDataSource>
 
-const emptySummaryResponse: PaginatedResponse<ExternalDataSourceSummaryApi> = {
+const emptySummaryResponse: PaginatedExternalDataSourceSummaryListApi = {
     results: [],
     count: 0,
     next: null,
