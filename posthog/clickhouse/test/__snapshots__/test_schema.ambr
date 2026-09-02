@@ -1784,7 +1784,7 @@
   SELECT
   uuid,
   event,
-  if(isValidJSON(properties) AND startsWith(trimLeft(properties), '{'), ifNull(accurateCastOrNull(JSONCleanPostHogEventProperties(properties), 'JSON'), CAST(concat('{"$unparseable_properties":', toJSONString(properties), '}'), 'JSON')), CAST(concat('{"$unparseable_properties":', toJSONString(properties), '}'), 'JSON')) AS properties,
+  if(isValidJSON(properties) AND startsWith(trimLeft(properties), '{'), JSONCleanPostHogEventProperties(properties), concat('{"$unparseable_properties":', toJSONString(properties), '}')) AS properties,
   timestamp,
   team_id,
   distinct_id,
@@ -1792,7 +1792,7 @@
   created_at,
   person_id,
   person_created_at,
-  if(isValidJSON(person_properties) AND startsWith(trimLeft(person_properties), '{'), ifNull(accurateCastOrNull(JSONCleanPostHogPersonProperties(person_properties), 'JSON'), CAST(concat('{"$unparseable_properties":', toJSONString(person_properties), '}'), 'JSON')), CAST(concat('{"$unparseable_properties":', toJSONString(person_properties), '}'), 'JSON')) AS person_properties,
+  if(isValidJSON(person_properties) AND startsWith(trimLeft(person_properties), '{'), JSONCleanPostHogPersonProperties(person_properties), concat('{"$unparseable_properties":', toJSONString(person_properties), '}')) AS person_properties,
   group0_properties,
   group1_properties,
   group2_properties,

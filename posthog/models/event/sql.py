@@ -476,19 +476,18 @@ FROM {database}.{kafka_table}
 
 
 def _clean_properties(column: str, cleaner: str) -> str:
-    fallback = f"CAST(concat('{{\"{UNPARSEABLE_PROPERTIES_KEY}\":', toJSONString({column}), '}}'), 'JSON')"
+    fallback = f"concat('{{\"{UNPARSEABLE_PROPERTIES_KEY}\":', toJSONString({column}), '}}')"
     return (
         f"if(isValidJSON({column}) AND startsWith(trimLeft({column}), '{{'), "
-        f"ifNull(accurateCastOrNull({cleaner}({column}), 'JSON'), {fallback}), "
-        f"{fallback}) AS {column}"
+        f"{cleaner}({column}), {fallback}) AS {column}"
     )
 
 
 # Dual-write materialized view that writes events into the native-JSON schema
 # (writable_events_json). It reads from a dedicated Kafka consumer group so JSON-table retries do not
 # replay legacy writes through events_json_mv. The string properties/person_properties payloads are
-# cleaned and cast without throwing so one incompatible payload cannot stall the Kafka consumer. The
-# legacy MV projects dmat_string_* columns, but the JSON table reads properties from JSON subcolumns.
+# cleaned without casting because the destination JSON columns parse them during insertion. Invalid
+# payloads are preserved under $unparseable_properties so they cannot stall the Kafka consumer.
 def EVENTS_JSON_TABLE_MV_SQL(
     mv_name="events_json_table_mv",
     kafka_table=KAFKA_EVENTS_NATIVE_JSON_TABLE,
