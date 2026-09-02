@@ -489,17 +489,23 @@ export function TaskInput({
     );
   }, [flagsLoaded, lastUsedAgentRuntime, piHarnessEnabled, settingsHydrated]);
 
-  const { workspaceMode, setWorkspaceMode, overrideWorkspaceMode } =
-    useResolvedWorkspaceMode({
-      hasGithubIntegration,
-      isLoadingIntegrations,
-      pinCloud: !!initialCloudRepository,
-    });
+  const {
+    workspaceMode,
+    isResolved: isWorkspaceModeResolved,
+    setWorkspaceMode,
+    overrideWorkspaceMode,
+  } = useResolvedWorkspaceMode({
+    hasGithubIntegration,
+    isLoadingIntegrations,
+    pinCloud: !!initialCloudRepository,
+  });
+  const localWorkspaceReady =
+    isWorkspaceModeResolved && workspaceMode !== "cloud";
 
   const showCodexNotConnectedNotice =
     runtime !== "pi" &&
     adapter === "codex" &&
-    workspaceMode !== "cloud" &&
+    localWorkspaceReady &&
     codexSubscription.needsConnection;
 
   const {
@@ -521,7 +527,7 @@ export function TaskInput({
     return repositories.includes(lower) ? lower : null;
   }, [selectedRepository, repositories]);
   const { currentBranch, branchLoading, defaultBranch, busyState } =
-    useGitQueries(selectedDirectory);
+    useGitQueries(selectedDirectory, { enabled: localWorkspaceReady });
 
   const selectedGithubUserIntegrationId = selectedCloudRepository
     ? getUserIntegrationIdForRepo(selectedCloudRepository)
@@ -1026,7 +1032,7 @@ export function TaskInput({
     channelName,
     channelId,
     channelContextId,
-    submissionBlocked: channelContextBlocked,
+    submissionBlocked: channelContextBlocked || !isWorkspaceModeResolved,
     allowNoRepo: repoOptional,
   });
 
@@ -1254,7 +1260,7 @@ export function TaskInput({
     >
       <DropZoneOverlay isVisible={isDraggingFile} />
       <Flex height="100%" width="100%">
-        {previewFile && selectedDirectory && (
+        {localWorkspaceReady && previewFile && selectedDirectory && (
           <Box className="h-full min-w-0 flex-1 border-gray-4 border-r">
             <NewTaskFilePreview
               repoPath={selectedDirectory}
@@ -1374,7 +1380,9 @@ export function TaskInput({
                       repoPath={
                         workspaceMode === "cloud"
                           ? selectedCloudRepository
-                          : selectedDirectory
+                          : localWorkspaceReady
+                            ? selectedDirectory
+                            : null
                       }
                       currentBranch={currentBranch}
                       defaultBranch={
@@ -1384,6 +1392,7 @@ export function TaskInput({
                       }
                       disabled={
                         isCreatingTask ||
+                        !isWorkspaceModeResolved ||
                         (workspaceMode === "cloud" && !selectedCloudRepository)
                       }
                       loading={
@@ -1412,7 +1421,7 @@ export function TaskInput({
                     />
                   </ButtonGroup>
                 )}
-                {!repoOptional && workspaceMode !== "cloud" && (
+                {!repoOptional && localWorkspaceReady && (
                   <AdditionalDirectoriesButton
                     values={additionalDirectories}
                     onChange={setAdditionalDirectories}
@@ -1690,7 +1699,9 @@ export function TaskInput({
                   </AnimatePresence>
                 ) : (
                   <NewTaskSuggestions
-                    repoPath={selectedDirectory || null}
+                    repoPath={
+                      localWorkspaceReady ? selectedDirectory || null : null
+                    }
                     workspaceMode={effectiveWorkspaceMode}
                     disabled={isCreatingTask}
                   />
