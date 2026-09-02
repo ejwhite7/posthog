@@ -18,7 +18,7 @@ use tracing::{error, info, warn};
 
 use crate::batcher::{make_batch_id, Batcher, BatcherOutputs};
 use crate::config::Config;
-use crate::config::LedgerMode;
+use crate::config::{CompletionGranularity, LedgerMode};
 use crate::debug_recorder::{record_if, DebugEventKind, DebugRecorder, PartitionOffset};
 use crate::discovery::DiscoveryMode;
 use crate::dispatcher::Dispatcher;
@@ -139,6 +139,8 @@ pub struct IngestionConsumerOptions {
     pub debug_recorder: Option<Arc<DebugRecorder>>,
     /// Whether the offset ledger observes or owns the commit path.
     pub ledger_mode: LedgerMode,
+    /// The unit that completes and commits.
+    pub completion_granularity: CompletionGranularity,
 }
 
 /// The main consumer loop: reads from Kafka, demuxes each poll into groups,
@@ -165,6 +167,8 @@ pub struct IngestionConsumer {
     topic_offset_ledger: Arc<TopicOffsetLedger>,
     /// Selects whether commits come from the batch spans or the ledger.
     ledger_mode: LedgerMode,
+    /// Selects the unit that completes and commits.
+    completion_granularity: CompletionGranularity,
 }
 
 impl IngestionConsumer {
@@ -209,6 +213,7 @@ impl IngestionConsumer {
             group_id: options.group_id,
             topic_offset_ledger,
             ledger_mode: options.ledger_mode,
+            completion_granularity: options.completion_granularity,
         }
     }
 
@@ -229,6 +234,16 @@ impl IngestionConsumer {
         };
         if config.worker_discovery_mode == DiscoveryMode::Static && worker_urls.is_empty() {
             anyhow::bail!("No worker addresses configured");
+        }
+
+        // Group granularity commits only through the ledger frontier, so the
+        // ledger must own the commit path.
+        if config.consumer_completion_granularity == CompletionGranularity::Group
+            && config.consumer_offset_ledger_mode != LedgerMode::Commit
+        {
+            anyhow::bail!(
+                "CONSUMER_COMPLETION_GRANULARITY=group requires CONSUMER_OFFSET_LEDGER_MODE=commit"
+            );
         }
 
         let client_config = config.build_consumer_config();
@@ -276,6 +291,7 @@ impl IngestionConsumer {
             group_id: config.ingestion_consumer_group_id.clone(),
             topic_offset_ledger,
             ledger_mode: config.consumer_offset_ledger_mode,
+            completion_granularity: config.consumer_completion_granularity,
         })
     }
 
@@ -300,7 +316,11 @@ impl IngestionConsumer {
             return;
         }
 
-        info!("Consumer loop starting");
+        info!(
+            ledger_mode = ?self.ledger_mode,
+            completion_granularity = ?self.completion_granularity,
+            "Consumer loop starting"
+        );
         record_if(&self.debug_recorder, || DebugEventKind::ConsumerStarted {
             group_id: self.group_id.clone(),
             workers: self.worker_urls.clone(),

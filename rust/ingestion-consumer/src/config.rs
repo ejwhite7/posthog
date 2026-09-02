@@ -33,6 +33,31 @@ impl FromStr for LedgerMode {
     }
 }
 
+/// The unit that completes and commits.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum CompletionGranularity {
+    /// A poll completes as a whole, oldest first.
+    #[default]
+    Poll,
+    /// Each send's groups complete on their own, in any order, and the ledger
+    /// frontier gates each partition's commit.
+    Group,
+}
+
+impl FromStr for CompletionGranularity {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value.trim().to_lowercase().as_str() {
+            "poll" => Ok(Self::Poll),
+            "group" => Ok(Self::Group),
+            other => Err(format!(
+                "unknown consumer completion granularity '{other}' (expected 'poll' or 'group')"
+            )),
+        }
+    }
+}
+
 /// Configuration for the ingestion consumer.
 ///
 /// Kafka env vars match the Node.js ingestion consumer so this can be a
@@ -199,6 +224,13 @@ pub struct Config {
     /// frontier after that comparison.
     #[envconfig(from = "CONSUMER_OFFSET_LEDGER_MODE", default = "shadow")]
     pub consumer_offset_ledger_mode: LedgerMode,
+
+    /// The unit that completes and commits. `poll` completes a whole poll at a
+    /// time, oldest first. `group` completes each send's groups on their own,
+    /// so a stalled key holds only its own partition. `group` requires
+    /// `CONSUMER_OFFSET_LEDGER_MODE=commit`.
+    #[envconfig(from = "CONSUMER_COMPLETION_GRANULARITY", default = "poll")]
+    pub consumer_completion_granularity: CompletionGranularity,
 
     // ---- Debug API ----
     /// Serve the real-time debug API (`/debug/load`, `/debug/state`,
@@ -499,7 +531,7 @@ impl Config {
 
 #[cfg(test)]
 mod tests {
-    use super::LedgerMode;
+    use super::{CompletionGranularity, LedgerMode};
     use std::str::FromStr;
 
     #[test]
@@ -507,5 +539,18 @@ mod tests {
         assert_eq!(LedgerMode::from_str(" SHADOW "), Ok(LedgerMode::Shadow));
         assert_eq!(LedgerMode::from_str("commit"), Ok(LedgerMode::Commit));
         assert!(LedgerMode::from_str("off").is_err());
+    }
+
+    #[test]
+    fn completion_granularity_parses_known_values() {
+        assert_eq!(
+            CompletionGranularity::from_str(" POLL "),
+            Ok(CompletionGranularity::Poll)
+        );
+        assert_eq!(
+            CompletionGranularity::from_str("group"),
+            Ok(CompletionGranularity::Group)
+        );
+        assert!(CompletionGranularity::from_str("batch").is_err());
     }
 }
