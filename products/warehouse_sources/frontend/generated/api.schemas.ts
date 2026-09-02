@@ -3318,6 +3318,8 @@ export interface ExternalDataSourceSerializersApi {
     /** @nullable */
     readonly last_run_at: string | null
     readonly schemas: readonly ExternalDataSourceSerializersApiSchemasItem[]
+    readonly schemas_count: number
+    readonly rows_synced: number
     job_inputs?: unknown
     readonly revenue_analytics_config: ExternalDataSourceRevenueAnalyticsConfigApi
     /**
@@ -4790,6 +4792,8 @@ export interface PatchedExternalDataSourceSerializersApi {
     /** @nullable */
     readonly last_run_at?: string | null
     readonly schemas?: readonly PatchedExternalDataSourceSerializersApiSchemasItem[]
+    readonly schemas_count?: number
+    readonly rows_synced?: number
     job_inputs?: unknown
     readonly revenue_analytics_config?: ExternalDataSourceRevenueAnalyticsConfigApi
     /**
@@ -13256,6 +13260,10 @@ export type ExternalDataSourcesListParams = {
      * A search term.
      */
     search?: string
+    /**
+     * Return source-level schema counts, row totals, status, and latest errors without embedding schemas. Use this for source index pages; omit it when the caller needs schema details.
+     */
+    summary?: boolean
 }
 
 export type ExternalDataSourcesBulkUpdateSchemasPartialUpdateParams = {
