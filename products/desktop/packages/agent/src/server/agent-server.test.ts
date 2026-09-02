@@ -1275,6 +1275,19 @@ describe("AgentServer HTTP Mode", () => {
         );
 
         if (expectsFailed) {
+          // The Django log drain reads `message` and `errorCategory` off this
+          // event; without them a failed run only carries a generic wrapper.
+          expect(testServer.eventStreamSender.enqueue).toHaveBeenCalledWith(
+            expect.objectContaining({
+              notification: expect.objectContaining({
+                method: "_posthog/error",
+                params: expect.objectContaining({
+                  message: errorMessage,
+                  errorCategory: expectedErrorType,
+                }),
+              }),
+            }),
+          );
           expect(testServer.posthogAPI.updateTaskRun).toHaveBeenCalledWith(
             "task-1",
             "run-1",

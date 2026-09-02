@@ -2411,7 +2411,9 @@ export class AgentServer {
       return { recoverable: true };
     }
 
-    await this.signalTaskComplete(payload, "error", displayMessage);
+    await this.signalTaskComplete(payload, "error", displayMessage, {
+      errorCategory: classification,
+    });
     return { recoverable: false };
   }
 
@@ -4561,6 +4563,7 @@ ${commonInstructions}
     payload: JwtPayload,
     stopReason: string,
     errorMessage?: string,
+    options?: { errorCategory?: AgentErrorClassification },
   ): Promise<void> {
     if (this.session?.payload.run_id === payload.run_id) {
       try {
@@ -4585,10 +4588,15 @@ ${commonInstructions}
 
     const status = "failed";
 
+    // `message` and `errorCategory` are the `_posthog/error` contract the Django
+    // log drain parses to report the real cause of a failed run. Without them it
+    // only sees Temporal's generic wrapper.
     this.enqueueTaskTerminalEvent(POSTHOG_NOTIFICATIONS.ERROR, {
       source: "agent_server",
       stopReason,
+      message: errorMessage ?? "Agent error",
       error: errorMessage ?? "Agent error",
+      errorCategory: options?.errorCategory,
     });
 
     try {
