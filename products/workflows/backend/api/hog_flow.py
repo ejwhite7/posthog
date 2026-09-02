@@ -1905,7 +1905,7 @@ MAX_CONVERSION_WINDOW_MINUTES = 365 * 24 * 60
 MAX_LEGACY_WINDOW_MINUTES = 90 * 24 * 60
 
 
-def _duration_minutes(value: str) -> float:
+def duration_to_minutes(value: str) -> float:
     return float(value[:-1]) * _MINUTES_PER_DURATION_UNIT[value[-1]]
 
 
@@ -1953,7 +1953,7 @@ class HogFlowConversionSerializer(serializers.Serializer):
     def validate_window(self, value: str | None) -> str | None:
         if value is None:
             return value
-        if _duration_minutes(value) > MAX_CONVERSION_WINDOW_MINUTES:
+        if duration_to_minutes(value) > MAX_CONVERSION_WINDOW_MINUTES:
             raise serializers.ValidationError("The conversion window cannot be longer than 365d.")
         return value
 
