@@ -57,7 +57,9 @@ export const hogFlowsCreateBodyTriggerMaskingOneTtlMin = 60
 export const hogFlowsCreateBodyTriggerMaskingOneTtlMax = 94608000
 
 export const hogFlowsCreateBodyConversionOneEventsItemFiltersOneSourceDefault = `events`
-export const hogFlowsCreateBodyConversionOneWindowRegExp = new RegExp('^\\d\*\\.?\\d+[dhms]$')
+export const hogFlowsCreateBodyConversionOneWindowMax = 32
+
+export const hogFlowsCreateBodyConversionOneWindowRegExp = new RegExp('^(?:\\d+(?:\\.\\d+)?|\\.\\d+)[dhms]$')
 export const hogFlowsCreateBodyEmailSendingRateLimitOneCountMax = 1000000
 
 export const hogFlowsCreateBodyActionsItemIdMax = 200
@@ -154,6 +156,7 @@ export const HogFlowsCreateBody = /* @__PURE__ */ zod
                         ),
                     window: zod
                         .string()
+                        .max(hogFlowsCreateBodyConversionOneWindowMax)
                         .regex(hogFlowsCreateBodyConversionOneWindowRegExp)
                         .nullish()
                         .describe(
@@ -469,7 +472,9 @@ export const hogFlowsPartialUpdateBodyTriggerMaskingOneTtlMin = 60
 export const hogFlowsPartialUpdateBodyTriggerMaskingOneTtlMax = 94608000
 
 export const hogFlowsPartialUpdateBodyConversionOneEventsItemFiltersOneSourceDefault = `events`
-export const hogFlowsPartialUpdateBodyConversionOneWindowRegExp = new RegExp('^\\d\*\\.?\\d+[dhms]$')
+export const hogFlowsPartialUpdateBodyConversionOneWindowMax = 32
+
+export const hogFlowsPartialUpdateBodyConversionOneWindowRegExp = new RegExp('^(?:\\d+(?:\\.\\d+)?|\\.\\d+)[dhms]$')
 export const hogFlowsPartialUpdateBodyEmailSendingRateLimitOneCountMax = 1000000
 
 export const HogFlowsPartialUpdateBody = /* @__PURE__ */ zod
@@ -552,6 +557,7 @@ export const HogFlowsPartialUpdateBody = /* @__PURE__ */ zod
                         ),
                     window: zod
                         .string()
+                        .max(hogFlowsPartialUpdateBodyConversionOneWindowMax)
                         .regex(hogFlowsPartialUpdateBodyConversionOneWindowRegExp)
                         .nullish()
                         .describe(
