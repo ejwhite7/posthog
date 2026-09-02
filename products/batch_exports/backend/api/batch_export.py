@@ -41,7 +41,7 @@ from posthog.models.integration import (
     DatabricksIntegrationError,
     Integration,
 )
-from posthog.security.url_validation import resolve_and_validate_host, resolve_and_validate_url
+from posthog.security.url_validation import validate_external_host, validate_external_url
 from posthog.temporal.common.client import sync_connect
 from posthog.utils import relative_date_parse, str_to_bool
 
@@ -1469,7 +1469,7 @@ class BatchExportSerializer(serializers.ModelSerializer):
 
             if merged_config.get("endpoint_url") is not None:
                 try:
-                    resolve_and_validate_url(merged_config["endpoint_url"])
+                    validate_external_url(merged_config["endpoint_url"])
                 except ValueError:
                     raise serializers.ValidationError(f"Invalid endpoint_url: '{merged_config['endpoint_url']}'")
 
@@ -1658,7 +1658,7 @@ class BatchExportSerializer(serializers.ModelSerializer):
 
             if host is not None:
                 try:
-                    resolve_and_validate_host(host)
+                    validate_external_host(host)
                 except ValueError:
                     raise serializers.ValidationError(f"Invalid host: '{host}'")
 

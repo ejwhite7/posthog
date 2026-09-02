@@ -119,6 +119,84 @@ class TestUrlValidation:
         assert ok and err is None
 
     @pytest.mark.parametrize(
+        "resolved_ips, expected_error",
+        [
+            ({ipaddress.ip_address("10.0.0.1")}, "internal IP"),
+            (set(), "Could not resolve"),
+            ({ipaddress.ip_address("93.184.216.34")}, None),
+        ],
+    )
+    def test_validate_external_host_enforced(self, monkeypatch, settings, resolved_ips, expected_error):
+        settings.TEST = False
+        monkeypatch.setattr(uv, "resolve_host_ips", lambda host: resolved_ips)
+        if expected_error is None:
+            uv.validate_external_host("db.example.com")
+        else:
+            with pytest.raises(ValueError, match=expected_error):
+                uv.validate_external_host("db.example.com")
+
+    @pytest.mark.parametrize(
+        "url, resolved_ip, should_raise",
+        [
+            ("http://127.0.0.1", None, True),
+            ("https://example.com", "93.184.216.34", False),
+        ],
+    )
+    def test_validate_external_url_enforced(self, monkeypatch, settings, url, resolved_ip, should_raise):
+        settings.TEST = False
+        if resolved_ip is not None:
+            monkeypatch.setattr(uv, "resolve_host_ips", lambda host: {ipaddress.ip_address(resolved_ip)})
+        if should_raise:
+            with pytest.raises(ValueError):
+                uv.validate_external_url(url)
+        else:
+            uv.validate_external_url(url)
+
+    def test_external_target_checks_bypassed_in_test_env(self, monkeypatch, settings):
+        # settings.TEST is the suite default; validation is skipped so destinations that point
+        # at localhost or a private host stay usable in dev and tests, without any resolution.
+        settings.TEST = True
+        settings.FORCE_URL_VALIDATION = False
+
+        def fail(*_args, **_kwargs):
+            raise AssertionError("resolution must not run when SSRF validation is bypassed")
+
+        monkeypatch.setattr(uv, "resolve_host_ips", fail)
+        uv.validate_external_host("10.0.0.1")
+        uv.validate_external_url("http://localhost:9000")
+
+    @pytest.mark.parametrize(
+        "host",
+        [
+            "db.corp",
+            "db.internal",
+            "svc.cluster.local",
+            "metadata.google.internal",
+            # Suffix matching is case sensitive, so the host path has to lowercase first.
+            "DB.CORP",
+        ],
+    )
+    def test_host_and_url_paths_agree_on_internal_names(self, monkeypatch, settings, host):
+        # The name resolves to a public IP here, so the IP check alone would let it through.
+        # Both entry points must still reject it, or split-horizon DNS and internal-looking
+        # registered domains slip past whichever one skipped the name checks.
+        settings.TEST = False
+        monkeypatch.setattr(uv, "resolve_host_ips", lambda _host: {ipaddress.ip_address("93.184.216.34")})
+
+        with pytest.raises(ValueError):
+            uv.validate_external_host(host)
+        allowed, _reason = uv.is_url_allowed(f"https://{host}")
+        assert not allowed
+
+    def test_force_url_validation_overrides_test_bypass(self, monkeypatch, settings):
+        settings.TEST = True
+        settings.FORCE_URL_VALIDATION = True
+        # A public-looking name, so this reaches the IP check rather than stopping at the name.
+        monkeypatch.setattr(uv, "resolve_host_ips", lambda host: {ipaddress.ip_address("10.0.0.1")})
+        with pytest.raises(ValueError, match="internal IP"):
+            uv.validate_external_host("db.example.com")
+
+    @pytest.mark.parametrize(
         "resolved_ip",
         [
             "192.168.1.10",
