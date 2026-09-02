@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use crate::charge::Charge;
-use crate::partition_offset_ledger::PartitionOffsetLedger;
+use crate::partition_offset_ledger::{PartitionOffsetLedger, TakenFrontier};
 use crate::types::Offset;
 
 pub type TopicPartition = (String, i32);
@@ -130,13 +130,14 @@ impl TopicOffsetLedger {
         })
     }
 
-    /// Drain the completed prefix and return the frontier it reached; `None`
-    /// when the partition has no ledger or nothing has completed at the front
-    /// of its window.
-    pub fn take_frontier(&self, topic_partition: &TopicPartition) -> Option<Offset> {
+    /// Drain the completed prefix and return the span it covers: the window
+    /// base it started from and the frontier it reached. `None` when the
+    /// partition has no ledger or nothing has completed at the front of its
+    /// window.
+    pub fn take_frontier(&self, topic_partition: &TopicPartition) -> Option<TakenFrontier> {
         let mut partitions = self.partitions.lock().unwrap();
         let entry = partitions.get_mut(topic_partition)?;
-        entry.take_frontier().map(|taken| taken.offset)
+        entry.take_frontier()
     }
 
     /// Offsets the partition's window still holds; 0 without a ledger.
@@ -193,7 +194,12 @@ mod tests {
             .expect("live ledger settles");
         assert_eq!(settlement.frontier, Some(Offset(12)));
 
-        assert_eq!(ledger.take_frontier(&tp("events", 0)), Some(Offset(12)));
+        assert_eq!(
+            ledger
+                .take_frontier(&tp("events", 0))
+                .map(|taken| taken.offset),
+            Some(Offset(12))
+        );
         assert_eq!(ledger.depth(&tp("events", 0)), 0);
     }
 
@@ -223,7 +229,7 @@ mod tests {
             .expect("live ledger settles");
         assert_eq!(settlement.frontier, None);
         assert_eq!(settlement.depth, 2);
-        assert_eq!(ledger.take_frontier(&tp("events", 0)), None);
+        assert!(ledger.take_frontier(&tp("events", 0)).is_none());
         assert_eq!(ledger.depth(&tp("events", 0)), 2);
 
         // The late completion arrives with the next batch and the held
@@ -232,7 +238,12 @@ mod tests {
             .complete(&tp("events", 0), &batch(1, vec![Offset(10)]))
             .expect("live ledger settles");
         assert_eq!(settlement.frontier, Some(Offset(12)));
-        assert_eq!(ledger.take_frontier(&tp("events", 0)), Some(Offset(12)));
+        assert_eq!(
+            ledger
+                .take_frontier(&tp("events", 0))
+                .map(|taken| taken.offset),
+            Some(Offset(12))
+        );
         assert_eq!(ledger.depth(&tp("events", 0)), 0);
     }
 
