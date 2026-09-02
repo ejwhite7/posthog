@@ -10,6 +10,7 @@ export default defineConfig({
     "src/dismissalReasons.ts",
     "src/domain-types.ts",
     "src/mcp-sandbox-proxy.ts",
+    "src/model-catalog.ts",
     "src/posthog-property-headers.ts",
     "src/product-engineer-prompt.ts",
     "src/quick-ask-shortcuts.ts",
