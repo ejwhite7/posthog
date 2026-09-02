@@ -4587,6 +4587,21 @@ ${commonInstructions}
     errorMessage?: string,
     options?: { errorCategory?: AgentErrorClassification },
   ): Promise<void> {
+    // Enqueue the terminal error event before the final flush. `message` and
+    // `errorCategory` are the `_posthog/error` contract the Django log drain
+    // parses to report the real cause of a failed run, and it reads that event
+    // from the S3 log. So the event has to be written to the log before the
+    // flush that ships it to S3 — not only onto the live stream and OTel.
+    if (stopReason === "error") {
+      this.enqueueTaskTerminalEvent(POSTHOG_NOTIFICATIONS.ERROR, {
+        source: "agent_server",
+        stopReason,
+        message: errorMessage ?? "Agent error",
+        error: errorMessage ?? "Agent error",
+        errorCategory: options?.errorCategory,
+      });
+    }
+
     if (this.session?.payload.run_id === payload.run_id) {
       try {
         await this.session.logWriter.flush(payload.run_id, {
@@ -4609,17 +4624,6 @@ ${commonInstructions}
     }
 
     const status = "failed";
-
-    // `message` and `errorCategory` are the `_posthog/error` contract the Django
-    // log drain parses to report the real cause of a failed run. Without them it
-    // only sees Temporal's generic wrapper.
-    this.enqueueTaskTerminalEvent(POSTHOG_NOTIFICATIONS.ERROR, {
-      source: "agent_server",
-      stopReason,
-      message: errorMessage ?? "Agent error",
-      error: errorMessage ?? "Agent error",
-      errorCategory: options?.errorCategory,
-    });
 
     try {
       await this.posthogAPI.updateTaskRun(payload.task_id, payload.run_id, {
@@ -4656,10 +4660,16 @@ ${commonInstructions}
       },
     };
     this.eventStreamSender?.enqueue(entry);
-    // Terminal events bypass the SessionLogWriter (and its sinks), so mirror
-    // them onto the OTel writer directly — a failed run is exactly what the
-    // telemetry must record.
-    this.session?.telemetry?.append(this.session.payload.run_id, entry);
+    // Persist to the session log too: the Django drain reads the terminal event
+    // from the S3 log to report the real cause of a failed run, and only the
+    // SessionLogWriter feeds that log. appendRawLine wraps the bare notification
+    // in the same {type, timestamp, notification} envelope the drain parses, and
+    // forwards it to the OTel sink — so telemetry still records the failed run
+    // without a second append here.
+    this.session?.logWriter.appendRawLine(
+      this.session.payload.run_id,
+      JSON.stringify(entry.notification),
+    );
   }
 
   private configureEnvironment({

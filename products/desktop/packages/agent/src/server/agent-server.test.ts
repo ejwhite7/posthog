@@ -31,6 +31,7 @@ import { getSessionJsonlPath } from "../adapters/claude/session/jsonl-hydration"
 import type { PermissionMode } from "../execution-mode";
 import type { PostHogAPIClient } from "../posthog-api";
 import type { ResumeState } from "../resume";
+import { SessionLogWriter } from "../session-log-writer";
 import {
   createMockApiClient,
   createTaskRun,
@@ -832,6 +833,79 @@ describe("AgentServer HTTP Mode", () => {
       );
     });
 
+    it("writes the terminal error to the session log before the final flush", async () => {
+      // The Django drain reads the terminal `_posthog/error` from the S3 log,
+      // which only the SessionLogWriter feeds. The event must be appended before
+      // the final flush that ships the log to S3, or the drain never sees it and
+      // falls back to the generic terminal message.
+      const order: string[] = [];
+      const appendRawLine = vi.fn((_sessionId: string, _line: string) => {
+        order.push("append");
+      });
+      const flush = vi.fn(async () => {
+        order.push("flush");
+      });
+      const testServer = new AgentServer({
+        port,
+        jwtPublicKey: TEST_PUBLIC_KEY,
+        repositoryPath: repo.path,
+        apiUrl: "http://localhost:8000",
+        apiKey: "test-api-key",
+        projectId: 1,
+        mode: "interactive",
+        taskId: "test-task-id",
+        runId: "test-run-id",
+      }) as unknown as {
+        eventStreamSender: {
+          enqueue: ReturnType<typeof vi.fn>;
+          stop: () => Promise<void>;
+        };
+        posthogAPI: { updateTaskRun: ReturnType<typeof vi.fn> };
+        session: unknown;
+        signalTaskComplete(
+          payload: JwtPayload,
+          stopReason: string,
+          errorMessage?: string,
+          options?: { errorCategory?: string },
+        ): Promise<void>;
+      };
+      testServer.eventStreamSender = {
+        enqueue: vi.fn(),
+        stop: vi.fn(async () => {}),
+      };
+      testServer.posthogAPI = { updateTaskRun: vi.fn(async () => ({})) };
+      testServer.session = {
+        acpSessionId: "acp-1",
+        payload: { run_id: "run-1" },
+        logWriter: { appendRawLine, flush },
+      };
+
+      await testServer.signalTaskComplete(
+        {
+          run_id: "run-1",
+          task_id: "task-1",
+          team_id: 1,
+          user_id: 1,
+          distinct_id: "distinct-id",
+          mode: "interactive",
+        },
+        "error",
+        "upstream_provider_failure: unexpected status 503",
+        { errorCategory: "upstream_provider_failure" },
+      );
+
+      // Appended to the log, and before the flush.
+      expect(order).toEqual(["append", "flush"]);
+      // Exactly the notification the drain's `_extract_agent_error` parses.
+      const rawLine = appendRawLine.mock.calls[0][1] as string;
+      const notification = JSON.parse(rawLine);
+      expect(notification.method).toBe("_posthog/error");
+      expect(notification.params).toMatchObject({
+        message: "upstream_provider_failure: unexpected status 503",
+        errorCategory: "upstream_provider_failure",
+      });
+    });
+
     it("still stops event ingest when terminal failure status update fails", async () => {
       const testServer = new AgentServer({
         port,
@@ -1080,7 +1154,22 @@ describe("AgentServer HTTP Mode", () => {
     // trace's root span only exports if telemetry is shut down at the run's
     // in-process terminal points.
     it("shuts down telemetry after mirroring the terminal failure record", async () => {
+      // In production telemetry is the SessionLogWriter's sink, so the terminal
+      // event reaches it through the log rather than a direct append. Wire it the
+      // same way and assert the mirror still lands before shutdown, so the root
+      // span exports with ERROR status.
       const order: string[] = [];
+      const telemetry = {
+        append: vi.fn((_sessionId: string, _entry: unknown) => {
+          order.push("append");
+        }),
+        shutdown: vi.fn(async () => {
+          order.push("shutdown");
+        }),
+      };
+      const logWriter = new SessionLogWriter({ sinks: [telemetry] });
+      logWriter.register("run-1", { taskId: "task-1", runId: "run-1" });
+
       const testServer = new AgentServer({
         port,
         jwtPublicKey: TEST_PUBLIC_KEY,
@@ -1092,14 +1181,7 @@ describe("AgentServer HTTP Mode", () => {
         taskId: "test-task-id",
         runId: "test-run-id",
       }) as unknown as {
-        session: {
-          payload: { run_id: string };
-          logWriter: { flush: ReturnType<typeof vi.fn> };
-          telemetry: {
-            append: ReturnType<typeof vi.fn>;
-            shutdown: ReturnType<typeof vi.fn>;
-          };
-        };
+        session: unknown;
         eventStreamSender: {
           enqueue: (event: Record<string, unknown>) => void;
           stop: () => Promise<void>;
@@ -1126,15 +1208,8 @@ describe("AgentServer HTTP Mode", () => {
       };
       testServer.session = {
         payload: { run_id: "run-1" },
-        logWriter: { flush: vi.fn(async () => {}) },
-        telemetry: {
-          append: vi.fn(() => {
-            order.push("append");
-          }),
-          shutdown: vi.fn(async () => {
-            order.push("shutdown");
-          }),
-        },
+        logWriter,
+        telemetry,
       };
 
       await testServer.signalTaskComplete(
@@ -1153,6 +1228,11 @@ describe("AgentServer HTTP Mode", () => {
       // The error mirror must land before shutdown so the root span exports
       // with ERROR status.
       expect(order).toEqual(["append", "shutdown"]);
+      const [, entry] = telemetry.append.mock.calls[0] as [
+        string,
+        { notification: { method: string } },
+      ];
+      expect(entry.notification.method).toBe("_posthog/error");
     });
 
     it.each([
