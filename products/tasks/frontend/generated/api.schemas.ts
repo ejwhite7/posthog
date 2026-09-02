@@ -4664,6 +4664,8 @@ export const TaskRunEnvironmentEnumApi = {
 } as const
 
 export interface TaskRunSummaryApi {
+    /** ID of the latest run. */
+    id: string
     status: TaskRunStatusEnumApi | null
     environment: TaskRunEnvironmentEnumApi | null
 }
@@ -4676,6 +4678,11 @@ export interface TaskSummaryDTOApi {
     title: string
     /** @nullable */
     repository: string | null
+    /**
+     * ID of the user who created the task, or null for system-created tasks.
+     * @nullable
+     */
+    created_by_id: number | null
     created_at: string
     updated_at: string
     origin_product?: string

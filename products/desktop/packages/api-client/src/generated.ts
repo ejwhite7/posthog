@@ -11064,6 +11064,8 @@ export namespace Schemas {
     results: Array<TaskRunDetail>;
   };
   export type TaskRunSummary = {
+    /** ID of the latest run. */
+    id: string;
     status: (StatusA35Enum | NullEnum) | null;
     environment: (EnvironmentC1cEnum | NullEnum) | null;
   };
@@ -11071,6 +11073,8 @@ export namespace Schemas {
     id: string;
     title: string;
     repository: string | null;
+    /** ID of the user who created the task, or null for system-created tasks. */
+    created_by_id: number | null;
     created_at: string;
     updated_at: string;
     latest_run: (TaskRunSummary & (unknown | null)) | null;
