@@ -14,4 +14,4 @@ pub use partition_offset_ledger::{PartitionOffsetLedger, TakenFrontier};
 pub use topic_offset_ledger::{
     EpochOffsets, Settlement, StaleReason, TopicOffsetLedger, TopicPartition,
 };
-pub use types::{Offset, Partition};
+pub use types::{GroupCompletion, Offset, Partition};
