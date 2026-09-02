@@ -70,27 +70,36 @@ impl LedgerShadow {
         }
     }
 
-    /// Settle one batch's slice of a partition: complete its offsets, compare
-    /// the frontier with the commit the batch submits, and drain the
-    /// completed prefix.
+    /// Settle one batch's slice of a partition: complete its offsets and
+    /// compare the frontier with the commit the batch submits. Returns the
+    /// settlement, or `None` when the ledger rejected the slice. The window
+    /// holds the offsets until `drain`.
     pub(crate) fn settle(
         &self,
         topic_partition: &TopicPartition,
         stamp: u64,
         offsets: impl IntoIterator<Item = Offset>,
         span: &OffsetSpan,
-    ) {
+    ) -> Option<Settlement> {
         if !self.enabled {
-            return;
+            return None;
         }
         let settlement = match self.ledger.complete(topic_partition, stamp, offsets) {
             Ok(settlement) => settlement,
             Err(rejection) => {
                 count_rejection("complete", topic_partition, rejection);
-                return;
+                return None;
             }
         };
         self.observe(topic_partition, &settlement, span, stamp);
+        Some(settlement)
+    }
+
+    /// Drain a settled partition's completed prefix and publish its depth.
+    pub(crate) fn drain(&self, topic_partition: &TopicPartition) {
+        if !self.enabled {
+            return;
+        }
         self.ledger.take_frontier(topic_partition);
         set_depth_gauge(
             &topic_partition.topic,
@@ -256,15 +265,20 @@ mod tests {
         ledger.forget_partitions([("events", 0)]);
         shadow.charge(&reassigned, 1, &charges(&[10]));
 
-        shadow.settle(&reassigned, 0, [Offset(10)], &span(10, 10));
-        shadow.settle(&live, 0, [Offset(20)], &span(20, 20));
-
-        assert_eq!(
-            ledger.depth(&reassigned),
-            1,
+        assert!(
+            shadow
+                .settle(&reassigned, 0, [Offset(10)], &span(10, 10))
+                .is_none(),
             "the stale batch settles nothing against the new ledger"
         );
-        assert_eq!(ledger.depth(&live), 0, "the live batch settles and drains");
+        let settlement = shadow
+            .settle(&live, 0, [Offset(20)], &span(20, 20))
+            .expect("the live batch settles");
+        assert_eq!(settlement.frontier, Some(Offset(21)));
+        shadow.drain(&live);
+
+        assert_eq!(ledger.depth(&reassigned), 1);
+        assert_eq!(ledger.depth(&live), 0, "the live batch drains");
     }
 
     #[test]
@@ -273,7 +287,11 @@ mod tests {
         let held = tp("events", 0);
         shadow.charge(&held, 0, &charges(&[10, 11]));
 
-        shadow.settle(&held, 0, [Offset(11)], &span(11, 11));
+        let settlement = shadow
+            .settle(&held, 0, [Offset(11)], &span(11, 11))
+            .expect("the batch settles");
+        assert_eq!(settlement.frontier, None);
+        shadow.drain(&held);
 
         assert_eq!(ledger.depth(&held), 2);
     }
@@ -283,7 +301,8 @@ mod tests {
         let (ledger, shadow) = shadow(false);
         let p0 = tp("events", 0);
         shadow.charge(&p0, 0, &charges(&[10]));
-        shadow.settle(&p0, 0, [Offset(10)], &span(10, 10));
+        assert!(shadow.settle(&p0, 0, [Offset(10)], &span(10, 10)).is_none());
+        shadow.drain(&p0);
 
         assert_eq!(ledger.depth(&p0), 0);
         assert_eq!(shadow.bumps(), 0);
