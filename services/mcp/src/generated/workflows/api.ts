@@ -59,7 +59,7 @@ export const hogFlowsCreateBodyTriggerMaskingOneTtlMax = 94608000
 export const hogFlowsCreateBodyConversionOneEventsItemFiltersOneSourceDefault = `events`
 export const hogFlowsCreateBodyConversionOneWindowMax = 32
 
-export const hogFlowsCreateBodyConversionOneWindowRegExp = new RegExp('^(?:\\d+(?:\\.\\d+)?|\\.\\d+)[dhms]$')
+export const hogFlowsCreateBodyConversionOneWindowRegExp = new RegExp('^(?:[0-9]+(?:\\.[0-9]+)?|\\.[0-9]+)[dhms]$')
 export const hogFlowsCreateBodyEmailSendingRateLimitOneCountMax = 1000000
 
 export const hogFlowsCreateBodyActionsItemIdMax = 200
@@ -474,7 +474,9 @@ export const hogFlowsPartialUpdateBodyTriggerMaskingOneTtlMax = 94608000
 export const hogFlowsPartialUpdateBodyConversionOneEventsItemFiltersOneSourceDefault = `events`
 export const hogFlowsPartialUpdateBodyConversionOneWindowMax = 32
 
-export const hogFlowsPartialUpdateBodyConversionOneWindowRegExp = new RegExp('^(?:\\d+(?:\\.\\d+)?|\\.\\d+)[dhms]$')
+export const hogFlowsPartialUpdateBodyConversionOneWindowRegExp = new RegExp(
+    '^(?:[0-9]+(?:\\.[0-9]+)?|\\.[0-9]+)[dhms]$'
+)
 export const hogFlowsPartialUpdateBodyEmailSendingRateLimitOneCountMax = 1000000
 
 export const HogFlowsPartialUpdateBody = /* @__PURE__ */ zod
