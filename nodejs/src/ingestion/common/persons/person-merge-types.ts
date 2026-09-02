@@ -51,6 +51,15 @@ export class PersonMergeCallFailedError extends PersonMergeError {
     }
 }
 
+/**
+ * The merge backend answered an unsettled verdict: a retry under the same
+ * op id may change the answer, so the batch fails and redelivery re-runs
+ * the merge rather than acking or dropping it.
+ */
+export class PersonMergeUnsettledError extends PersonMergeError {
+    readonly type = 'UNSETTLED' as const
+}
+
 export class PersonMergeRaceConditionError extends PersonMergeError {
     readonly type = 'RACE_CONDITION' as const
 
