@@ -260,6 +260,7 @@
           return isoString;
       }
   }
+  function __cloneInputs(inputs) { return typeof structuredClone === 'function' ? structuredClone(inputs) : JSON.parse(JSON.stringify(inputs)); }
   function buildInputs(globals, initial) {
   let inputs = {
   };
@@ -283,7 +284,7 @@
               let __getGlobal = (key) => filterGlobals[key];
               const filterMatches = (__getGlobal("event") == "$pageview");
               if (!filterMatches) { return; }
-              if ((__getGlobal("event") == "$autocapture")) {(function (){const newInputs = structuredClone(inputs); const __getGlobal = (key) => key === 'inputs' ? newInputs : globals[key];
+              if ((__getGlobal("event") == "$autocapture")) {(function (){const newInputs = __cloneInputs(inputs); const __getGlobal = (key) => key === 'inputs' ? newInputs : globals[key];
   try { newInputs["greeting"] = concat("Hallo, ", __getProperty(__getProperty(__getGlobal("person"), "properties", true), "nonexistent_property", true), "!"); } catch (e) { console.error(e) }
   source.onEvent({ inputs: newInputs, posthog });})();}
   

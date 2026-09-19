@@ -410,6 +410,35 @@ class TestSiteFunctions(TestCase):
         assert "Loaded" == response.strip()
 
     @patch("posthog.cdp.site_functions.transpile", side_effect=mock_transpile)
+    def test_run_function_onevent_without_structured_clone(self, mock_transpile_fn):
+        # Some runtimes (old or embedded browsers, crawlers) do not expose structuredClone.
+        # The bundle must fall back to the JSON round trip instead of throwing.
+        self.hog_function.hog = "export function onEvent({ inputs }) { console.log(inputs.message); }"
+        self.hog_function.inputs = {"message": {"value": "Hello World {event.properties.id}"}}
+        self.hog_function.mappings = [
+            {
+                "inputs": {"greeting": {"value": "Hallo!"}},
+                "filters": {"events": [{"id": "$pageview", "name": "$pageview", "type": "events"}]},
+            }
+        ]
+
+        result = self.compile_and_run()
+
+        globals = {
+            "event": {"event": "$pageview", "properties": {"id": "banana"}},
+            "groups": {},
+            "person": {"properties": {"name": "Bob"}},
+        }
+        response = self._execute_javascript(
+            "globalThis.structuredClone = undefined;\n"
+            + result
+            + "().init({ posthog: { get_property: () => ({name: 'Bob'}) }, callback: () => { console.log('Loaded') } }).processEvent("
+            + json.dumps(globals)
+            + ")"
+        )
+        assert "Loaded\nHello World banana" == response.strip()
+
+    @patch("posthog.cdp.site_functions.transpile", side_effect=mock_transpile)
     def test_run_function_skip_disabled_mapping(self, mock_transpile_fn):
         self.hog_function.hog = "export function onEvent({ inputs }) { console.log(inputs.message); }"
         self.hog_function.inputs = {"message": {"value": "Hello World {event.properties.id}"}}
