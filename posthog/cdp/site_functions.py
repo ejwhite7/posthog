@@ -8,6 +8,13 @@ from posthog.cdp.validation import transpile_template_code
 from products.cdp.backend.models.hog_functions.hog_function import HogFunction
 from products.cdp.backend.models.plugin import transpile
 
+# `structuredClone` is missing on some runtimes (old or embedded browsers, crawlers).
+# The inputs are JSON-shaped, so the JSON round trip is a safe fallback that loses nothing.
+CLONE_INPUTS_HELPER = (
+    "function __cloneInputs(inputs) { "
+    "return typeof structuredClone === 'function' ? structuredClone(inputs) : JSON.parse(JSON.stringify(inputs)); }"
+)
+
 
 def get_transpiled_function(hog_function: HogFunction) -> str:
     response = ""
@@ -74,7 +81,7 @@ def get_transpiled_function(hog_function: HogFunction) -> str:
 
         mapping_code += f"if ({mapping_filters_code}) {{"
         mapping_code += "(function (){"  # IIFE so that the code below has different globals than the filters above
-        mapping_code += "const newInputs = structuredClone(inputs); const __getGlobal = (key) => key === 'inputs' ? newInputs : globals[key];\n"
+        mapping_code += "const newInputs = __cloneInputs(inputs); const __getGlobal = (key) => key === 'inputs' ? newInputs : globals[key];\n"
 
         for schema in mapping_inputs_schema:
             if "key" in schema and schema["key"] not in mapping_inputs:
@@ -143,7 +150,9 @@ def get_transpiled_function(hog_function: HogFunction) -> str:
     )
 
     # Wrap in IIFE = Immediately Invoked (invokable) Function Expression = to avoid polluting global scope
-    # Add collected STL functions above the generated code
-    response = "(function() {\n" + compiler.get_stl_code() + "\n" + response + "\n})"
+    # Add collected STL functions above the generated code. Only mappings clone inputs, so ship the
+    # helper only when there is mapping code that uses it.
+    clone_helper = CLONE_INPUTS_HELPER + "\n" if mapping_code else ""
+    response = "(function() {\n" + compiler.get_stl_code() + "\n" + clone_helper + response + "\n})"
 
     return response
