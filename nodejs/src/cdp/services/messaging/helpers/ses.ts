@@ -240,24 +240,18 @@ const toBareAddress = (value: string): string => (value.match(/<([^>]+)>/)?.[1] 
 // recipient the send is for, where `mail.destination` lists every copy in no fixed order.
 const getToAddresses = (rec: SesEventRecord): string[] => (rec.mail.commonHeaders?.to ?? []).map(toBareAddress)
 
-/**
- * True when a Delivery event is for a cc or bcc copy and not for the To recipient.
- *
- * SES publishes one Delivery event for each recipient that accepts the message, so a send with a
- * copy address delivers more than once. Only the delivery to the To recipient counts, so that one
- * send records one delivery. When the event does not name its recipients or the To header is
- * missing, the copy cannot be identified and the delivery counts.
- */
-const isCopyRecipientDelivery = (rec: SesEventRecord): boolean => {
+// SES publishes one Delivery event for each recipient that accepts the message, so only the
+// delivery to the To recipient counts. Without a To header or a recipients list, the delivery counts.
+const isCopyRecipientDelivery = (rec: SesEventRecord, toAddresses: string[]): boolean => {
     if (rec.eventType !== 'Delivery') {
         return false
     }
-    const toAddresses = getToAddresses(rec).map((address) => address.toLowerCase())
     const recipients = rec.delivery.recipients ?? []
     if (toAddresses.length === 0 || recipients.length === 0) {
         return false
     }
-    return !recipients.some((recipient) => toAddresses.includes(toBareAddress(recipient).toLowerCase()))
+    const lowerToAddresses = toAddresses.map((address) => address.toLowerCase())
+    return !recipients.some((recipient) => lowerToAddresses.includes(toBareAddress(recipient).toLowerCase()))
 }
 
 // Bounds how much of a URL rides in the app_metrics2 sort key. Long enough to stay recognizable in
@@ -753,9 +747,10 @@ export class SesWebhookHandler {
             // Test sends (from the editor's "Run test") are not production activity, so we skip
             // their delivery/open/click metrics — otherwise a draft/never-enabled workflow shows
             // email activity in its Metrics tab. Bounce-driven opt-outs below still apply.
-            if (metricName && !isTest && !isCopyRecipientDelivery(rec)) {
+            const toAddresses = getToAddresses(rec)
+            if (metricName && !isTest && !isCopyRecipientDelivery(rec, toAddresses)) {
                 const properties: Record<string, any> = {
-                    $email_to: getToAddresses(rec)[0] ?? rec.mail.destination?.[0],
+                    $email_to: toAddresses[0] ?? rec.mail.destination?.[0],
                     $email_subject: rec.mail.commonHeaders?.subject,
                 }
 
