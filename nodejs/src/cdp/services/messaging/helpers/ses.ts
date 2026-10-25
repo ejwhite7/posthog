@@ -44,7 +44,14 @@ const SesMailSchema = z.object({
     destination: z.array(z.string()),
     headersTruncated: z.boolean().optional(),
     headers: z.array(z.object({ name: z.string(), value: z.string() })).optional(),
-    commonHeaders: z.object({ subject: z.string().optional() }).passthrough().optional(),
+    commonHeaders: z
+        .object({
+            subject: z.string().optional(),
+            // A malformed value must not reject the whole record, so it falls back to undefined.
+            to: z.array(z.string()).optional().catch(undefined),
+        })
+        .passthrough()
+        .optional(),
     tags: z.record(z.string(), z.array(z.string())).optional(), // your message tags: { user_id: ["u_123"] }
 })
 
@@ -224,6 +231,33 @@ export const resolveClickDestination = (link: string): string => {
     } catch {
         return link
     }
+}
+
+// The bare address of an RFC-822 entry such as `"Name" <user@example.com>`.
+const toBareAddress = (value: string): string => (value.match(/<([^>]+)>/)?.[1] ?? value).trim()
+
+// The addresses in the To header. Cc and bcc copies never appear in it, so it identifies the
+// recipient the send is for, where `mail.destination` lists every copy in no fixed order.
+const getToAddresses = (rec: SesEventRecord): string[] => (rec.mail.commonHeaders?.to ?? []).map(toBareAddress)
+
+/**
+ * True when a Delivery event is for a cc or bcc copy and not for the To recipient.
+ *
+ * SES publishes one Delivery event for each recipient that accepts the message, so a send with a
+ * copy address delivers more than once. Only the delivery to the To recipient counts, so that one
+ * send records one delivery. When the event does not name its recipients or the To header is
+ * missing, the copy cannot be identified and the delivery counts.
+ */
+const isCopyRecipientDelivery = (rec: SesEventRecord): boolean => {
+    if (rec.eventType !== 'Delivery') {
+        return false
+    }
+    const toAddresses = getToAddresses(rec).map((address) => address.toLowerCase())
+    const recipients = rec.delivery.recipients ?? []
+    if (toAddresses.length === 0 || recipients.length === 0) {
+        return false
+    }
+    return !recipients.some((recipient) => toAddresses.includes(toBareAddress(recipient).toLowerCase()))
 }
 
 // Bounds how much of a URL rides in the app_metrics2 sort key. Long enough to stay recognizable in
@@ -719,9 +753,9 @@ export class SesWebhookHandler {
             // Test sends (from the editor's "Run test") are not production activity, so we skip
             // their delivery/open/click metrics — otherwise a draft/never-enabled workflow shows
             // email activity in its Metrics tab. Bounce-driven opt-outs below still apply.
-            if (metricName && !isTest) {
+            if (metricName && !isTest && !isCopyRecipientDelivery(rec)) {
                 const properties: Record<string, any> = {
-                    $email_to: rec.mail.destination?.[0],
+                    $email_to: getToAddresses(rec)[0] ?? rec.mail.destination?.[0],
                     $email_subject: rec.mail.commonHeaders?.subject,
                 }
 
