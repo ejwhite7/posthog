@@ -475,6 +475,32 @@ describe('SesWebhookHandler', () => {
         ])
     })
 
+    it.each([
+        ['the To recipient', ['Jane Doe <TO@example.com>'], ['email_delivered']],
+        ['a bcc copy', ['crm@example.net'], []],
+    ])('counts a delivery to %s only once per send', async (_label, recipients, expectedMetrics) => {
+        // SES orders `mail.destination` freely, so the bcc copy can come first.
+        const mailWithBcc = {
+            ...baseMail,
+            destination: ['crm@example.net', 'to@example.com'],
+            commonHeaders: { to: ['"Jane Doe" <to@example.com>'] },
+        }
+        const body = [
+            {
+                eventType: 'Delivery',
+                mail: mailWithBcc,
+                delivery: { timestamp: '2025-10-03T12:03:00Z', recipients },
+            },
+        ]
+        const result = await handler.handleWebhook({ body, headers: {} })
+        expect(result.metrics?.map((m) => m.metricName)).toEqual(expectedMetrics)
+        expect(result.metrics?.map((m) => m.properties?.$email_to)).toEqual(expectedMetrics.map(() => 'to@example.com'))
+        // Every recipient's delivery still resets that address's soft-bounce counter.
+        expect(result.deliveredRecipients).toEqual([
+            { teamId: '1', emailAddresses: recipients, timestamp: '2025-10-03T12:03:00Z' },
+        ])
+    })
+
     it('parses a raw Bounce event and surfaces permanent bounces for suppression', async () => {
         const body = [
             {
